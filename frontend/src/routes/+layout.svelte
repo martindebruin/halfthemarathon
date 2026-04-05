@@ -41,9 +41,9 @@
 
   nav {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    padding: 1rem 1.5rem;
+    padding: 1rem 1.5rem 0.75rem;
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
@@ -52,14 +52,16 @@
   }
   .logo img {
     display: block;
-    height: 36px;
-    width: auto;
+    width: 100%;
+    max-width: 700px;
+    height: auto;
   }
   .links {
     display: flex;
     gap: 1.5rem;
     font-size: 0.9rem;
     color: var(--muted);
+    margin-top: 0.6rem;
   }
   .links a:hover { color: var(--text); }
 </style>
