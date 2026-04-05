@@ -1,0 +1,30 @@
+{
+  "name": "htmitub-migrator",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "oauth": "tsx src/oauth.ts",
+    "test-strava": "tsx src/strava-test.ts",
+    "validate": "tsx src/validate.ts",
+    "setup-schema": "tsx src/setup-schema.ts",
+    "migrate": "tsx src/index.ts",
+    "migrate:dry": "tsx src/index.ts --dry-run",
+    "test": "vitest run",
+    "backfill": "tsx src/backfill.ts",
+    "patch-polylines": "tsx src/patch-polylines.ts",
+    "patch-calories": "tsx src/patch-calories.ts"
+  },
+  "dependencies": {
+    "@mapbox/polyline": "^1.2.1",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.7",
+    "form-data": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/mapbox__polyline": "^1.0.5",
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,27 @@
+.env
+node_modules/
+dist/
+build/
+migrator/state/progress.json
+*.log
+.DS_Store
+.superpowers/
+webhook-listener/data/
+
+# Android — has its own repo (github.com/martindebruin/htmitub-recorder)
+android/
+
+# Source logo files (deployed copies are in frontend/static/ and android mipmaps)
+applogo.png
+halfthemarathonbannerlogo.png
+
+# Claude session resume file
+resume
+
+# Runkeeper export data (migration source data, not code)
+recovered/
+routes/
+*.zip
+migrator/state/
+recover.py
+ziDPryqF

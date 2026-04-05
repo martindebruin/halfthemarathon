@@ -1,0 +1,86 @@
+services:
+  directus:
+    image: directus/directus:11
+    restart: unless-stopped
+    networks:
+      - internal
+      - proxy
+    volumes:
+      - directus_db:/directus/database
+      - directus_uploads:/directus/uploads
+    env_file: .env
+    environment:
+      SECRET: "${DIRECTUS_SECRET}"
+      DB_CLIENT: sqlite3
+      DB_FILENAME: /directus/database/db.sqlite
+      ADMIN_EMAIL: "${DIRECTUS_ADMIN_EMAIL}"
+      ADMIN_PASSWORD: "${DIRECTUS_ADMIN_PASSWORD}"
+      PUBLIC_URL: "${DIRECTUS_PUBLIC_URL}"
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: "${FRONTEND_URL}"
+      STORAGE_LOCATIONS: local
+      STORAGE_LOCAL_ROOT: /directus/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8055/server/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  webhook-listener:
+    build:
+      context: ./webhook-listener
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - internal
+      - proxy
+    env_file: .env
+    environment:
+      DIRECTUS_INTERNAL_URL: "http://directus:8055"
+      PORT: "3001"
+    volumes:
+      - webhook_data:/app/data
+    depends_on:
+      directus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_DIRECTUS_PUBLIC_URL: "${DIRECTUS_PUBLIC_URL}"
+    restart: unless-stopped
+    networks:
+      - internal
+      - proxy
+    env_file: .env
+    environment:
+      DIRECTUS_INTERNAL_URL: "http://directus:8055"
+      PORT: "3000"
+    depends_on:
+      directus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  internal:
+  proxy:
+    external: true
+
+volumes:
+  directus_db:
+  directus_uploads:
+  webhook_data:
