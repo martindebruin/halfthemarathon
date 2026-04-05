@@ -45,6 +45,7 @@
     return `${m}:${String(s).padStart(2, '0')} /km`;
   }
 
+  const isAdmin = $derived(data.isAdmin);
   let editingKey: string | null = $state(null);
   let editingValue: string = $state('');
   let editInputEl: HTMLInputElement | undefined = $state(undefined);
@@ -258,7 +259,7 @@
           {#each data.routes as route (route.cluster_key)}
             <tr>
               <td class="route-name-cell">
-                {#if editingKey === route.cluster_key}
+                {#if isAdmin && editingKey === route.cluster_key}
                   <input
                     class="route-edit"
                     type="text"
@@ -267,10 +268,15 @@
                     onblur={() => commitEdit(route.cluster_key)}
                     onkeydown={(e) => handleKeydown(e, route.cluster_key)}
                   />
-                {:else}
+                {:else if isAdmin}
                   <button class="route-name-btn" onclick={() => startEdit(route.cluster_key, route.display_name)}>
                     {route.display_name}
                   </button>
+                  {#if route.sample_polyline}
+                    <button class="map-btn" onclick={() => previewRoute = route}>Map</button>
+                  {/if}
+                {:else}
+                  <span>{route.display_name}</span>
                   {#if route.sample_polyline}
                     <button class="map-btn" onclick={() => previewRoute = route}>Map</button>
                   {/if}

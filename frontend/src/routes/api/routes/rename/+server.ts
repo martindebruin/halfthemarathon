@@ -1,8 +1,10 @@
 import { upsertRouteAlias } from '$lib/server/directus.js';
+import { isAdmin } from '$lib/server/admin.js';
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
+  if (!isAdmin(cookies)) throw error(401, 'Unauthorized');
   let body: unknown;
   try {
     body = await request.json();
