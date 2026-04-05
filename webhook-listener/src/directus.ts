@@ -170,3 +170,51 @@ export async function upsertAppRun(payload: AppRunPayload): Promise<string> {
   }) as { data: { id: string } };
   return created.data.id;
 }
+
+export async function patchActivityName(id: string, name: string): Promise<void> {
+  await directusFetch(`/items/activities/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function uploadPhotoForAppRun(
+  appRunId: string,
+  fileBuffer: Buffer,
+  mimeType: string,
+): Promise<string | null> {
+  const idKey = `app:${appRunId}`;
+
+  const existing = await directusFetch(
+    `/items/activities?filter[runkeeper_id][_eq]=${encodeURIComponent(idKey)}&fields=id`,
+  ) as { data: Array<{ id: string }> };
+  if (existing.data.length === 0) return null;
+  const activityId = existing.data[0].id;
+
+  const filename = `app-run-${appRunId}.jpg`;
+  const form = new globalThis.FormData();
+  form.append('file', new Blob([fileBuffer.buffer as ArrayBuffer], { type: mimeType }), filename);
+  const fileRes = await fetch(`${getDirectusUrl()}/files`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: form,
+  });
+  if (!fileRes.ok) throw new Error(`File upload failed ${fileRes.status}`);
+  const fileData = await fileRes.json() as { data: { id: string } };
+  const fileId = fileData.data.id;
+
+  await directusFetch('/items/photos', {
+    method: 'POST',
+    body: JSON.stringify({
+      activity_id: activityId,
+      directus_file_id: fileId,
+      original_filename: filename,
+      caption: null,
+      lat: null,
+      lng: null,
+    }),
+  });
+
+  const publicUrl = process.env.DIRECTUS_PUBLIC_URL ?? 'https://cms-run.martindebruin.se';
+  return `${publicUrl}/assets/${fileId}?width=240&height=144&fit=cover&quality=70`;
+}

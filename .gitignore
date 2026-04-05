@@ -20,7 +20,7 @@ resume
 
 # Runkeeper export data (migration source data, not code)
 recovered/
-routes/
+/routes/
 *.zip
 migrator/state/
 recover.py
