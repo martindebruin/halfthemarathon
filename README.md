@@ -2,8 +2,6 @@
 
 Personal running analytics app aggregating 6+ years of Runkeeper and Strava data into a self-hosted web app.
 
-Live at [halfthemarathoniusedtobe.martindebruin.se](https://halfthemarathoniusedtobe.martindebruin.se)
-
 ## What it does
 
 - Run grid with photos, maps, and splits for every activity
@@ -22,13 +20,13 @@ Live at [halfthemarathoniusedtobe.martindebruin.se](https://halfthemarathoniused
 | Directus 11 | Headless CMS / data store (SQLite) | 8055 |
 | `migrator/` | One-shot scripts for historical data migration and backfills | — |
 
-All services run via Docker Compose behind a Traefik reverse proxy. Directus uses SQLite.
+All services run via Docker Compose behind a reverse proxy. Directus uses SQLite.
 
 ## Stack
 
 - **Frontend:** SvelteKit 2 + Svelte 5 (runes), TypeScript, Leaflet, Chart.js, `@directus/sdk`
 - **Backend:** Express 4 + TypeScript, better-sqlite3 (event queue), Directus 11
-- **Infra:** Docker Compose, dedibox1 (self-hosted), Traefik reverse proxy
+- **Infra:** Docker Compose, Traefik reverse proxy
 - **Android:** Kotlin, Room, WorkManager, OkHttp, Coil
 
 ## Development
@@ -81,12 +79,12 @@ npm run test
 
 ## Deployment
 
-Manual rsync + Docker Compose rebuild on dedibox1. No CI/CD.
+Manual rsync + Docker Compose rebuild. No CI/CD.
 
 ```bash
 # Example: deploy frontend
-rsync -avz frontend/src/ dedibox1:/home/martin/dockers/halfthemarathon/frontend/src/
-ssh dedibox1 "cd /home/martin/dockers/halfthemarathon && docker compose up --build -d frontend"
+rsync -avz frontend/src/ <host>:/path/to/halfthemarathon/frontend/src/
+ssh <host> "cd /path/to/halfthemarathon && docker compose up --build -d frontend"
 ```
 
 `VITE_DIRECTUS_PUBLIC_URL` is baked into the frontend bundle at build time via Docker build arg.
