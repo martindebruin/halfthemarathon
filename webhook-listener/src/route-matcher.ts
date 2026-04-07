@@ -1,9 +1,17 @@
 import polyline from '@mapbox/polyline';
 
-const DIRECTUS_URL = process.env.DIRECTUS_INTERNAL_URL ?? 'http://directus:8055';
-const DIRECTUS_TOKEN = process.env.DIRECTUS_TOKEN ?? '';
 const THRESHOLD_M = 120;
 const SAMPLE_POINTS = 24;
+
+function directusUrl(): string {
+  return process.env.DIRECTUS_INTERNAL_URL ?? 'http://directus:8055';
+}
+
+function directusToken(): string {
+  const t = process.env.DIRECTUS_TOKEN;
+  if (!t) throw new Error('DIRECTUS_TOKEN not set');
+  return t;
+}
 
 type Point = [number, number]; // [lat, lng]
 
@@ -59,25 +67,25 @@ interface NamedRouteRow {
 
 async function fetchNamedRoutes(): Promise<NamedRouteRow[]> {
   const url =
-    `${DIRECTUS_URL}/items/activities?limit=-1` +
+    `${directusUrl()}/items/activities?limit=-1` +
     `&filter[route_name][_nnull]=true` +
     `&fields=route_name,summary_polyline,distance_m`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${DIRECTUS_TOKEN}` } });
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${directusToken()}` } });
   if (!res.ok) throw new Error(`Directus fetch failed ${res.status}`);
   const json = await res.json() as { data: NamedRouteRow[] };
   return json.data.filter((r) => r.summary_polyline);
 }
 
 async function patchRouteName(activityId: string, routeName: string): Promise<void> {
-  const res = await fetch(`${DIRECTUS_URL}/items/activities/${activityId}`, {
+  const res = await fetch(`${directusUrl()}/items/activities/${activityId}`, {
     method: 'PATCH',
     headers: {
-      Authorization: `Bearer ${DIRECTUS_TOKEN}`,
+      Authorization: `Bearer ${directusToken()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ route_name: routeName }),
   });
-  if (!res.ok) throw new Error(`PATCH route_name failed ${res.status}`);
+  if (!res.ok) throw new Error(`PATCH route_name failed ${res.status}: ${await res.text()}`);
 }
 
 export async function matchAndAssignRoute(
@@ -87,6 +95,7 @@ export async function matchAndAssignRoute(
 ): Promise<void> {
   const namedRoutes = await fetchNamedRoutes();
   if (namedRoutes.length === 0) return;
+  if (distanceM <= 0) return;
 
   // Group by route_name: pick longest polyline as representative, track avg distance
   const groups = new Map<string, { repPolyline: string; distances: number[] }>();

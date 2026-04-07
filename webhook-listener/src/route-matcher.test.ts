@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import polyline from '@mapbox/polyline';
 import {
   haversineM,
@@ -75,6 +75,7 @@ describe('sampleEncodedPolyline', () => {
 // ── matchAndAssignRoute ───────────────────────────────────────────────────────
 
 const STOCKHOLM_PTS: Point[] = [
+
   [59.368, 17.087], [59.370, 17.090], [59.372, 17.087], [59.370, 17.084],
 ];
 const EQUATOR_PTS: Point[] = [
@@ -91,6 +92,19 @@ function makePatchResponse() {
 }
 
 describe('matchAndAssignRoute', () => {
+  // Set environment variable for all tests in this describe block
+  const originalToken = process.env.DIRECTUS_TOKEN;
+  beforeAll(() => {
+    process.env.DIRECTUS_TOKEN = 'test-token';
+  });
+  afterAll(() => {
+    if (originalToken) {
+      process.env.DIRECTUS_TOKEN = originalToken;
+    } else {
+      delete process.env.DIRECTUS_TOKEN;
+    }
+  });
+
   it('patches route_name when polyline matches within threshold', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(makeDirectusResponse([
@@ -141,5 +155,17 @@ describe('matchAndAssignRoute', () => {
     await matchAndAssignRoute('act-004', STOCKHOLM_ENCODED, 8000);
 
     expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not patch when distanceM is 0', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(makeDirectusResponse([
+        { route_name: 'TestRoute', summary_polyline: STOCKHOLM_ENCODED, distance_m: 0 },
+      ])),
+    );
+
+    await matchAndAssignRoute('act-005', STOCKHOLM_ENCODED, 0);
+
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1); // GET only, no PATCH
   });
 });
