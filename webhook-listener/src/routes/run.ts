@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import multer from 'multer';
 import { upsertAppRun, uploadPhotoForAppRun } from '../directus.js';
 import { generateAndSaveHeadline } from '../headline.js';
+import { matchAndAssignRoute } from '../route-matcher.js';
 import { log } from '../logger.js';
 import type { AppRunPayload } from '../directus.js';
 
@@ -64,6 +65,12 @@ runRouter.post('/', async (req: Request, res: Response) => {
       p.start_lat ?? null,
       p.start_lng ?? null,
     ).catch(err => log('warn', 'headline_failed', { error: String(err) }));
+
+    // Fire-and-forget: match to known route if polyline available
+    if (p.summary_polyline && p.distance_m) {
+      matchAndAssignRoute(activityId, p.summary_polyline, p.distance_m)
+        .catch(err => log('warn', 'route_match_failed', { error: String(err) }));
+    }
   } catch (err) {
     log('error', 'app_run_failed', { app_run_id: validation.payload.app_run_id, error: String(err) });
     res.status(500).json({ error: 'Internal server error' });
