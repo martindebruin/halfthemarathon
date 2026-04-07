@@ -18,6 +18,9 @@ halfthemarathonbannerlogo.png
 # Claude session resume file
 resume
 
+# Git worktrees
+.worktrees/
+
 # Runkeeper export data (migration source data, not code)
 recovered/
 /routes/
