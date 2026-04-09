@@ -164,18 +164,18 @@
               </thead>
               <tbody>
                 {#each top5 as run, i (run.id)}
-                  <tr class:current-run={run.id === data.activity.id}>
+                  <tr class:current-run={run.id === activityId} onclick={() => window.location.href = `/run/${run.id}`} style="cursor:pointer">
                     <td>{i + 1}</td>
-                    <td><a href="/run/{run.id}">{run.date.slice(0, 10)}</a></td>
+                    <td>{run.date.slice(0, 10)}</td>
                     <td>{run.time_s != null ? formatDuration(run.time_s) : '—'}</td>
                     <td>{run.pace_s_km != null ? fmtPace(run.pace_s_km) : '—'}</td>
                   </tr>
                 {/each}
                 {#if !isInTop5 && thisRouteRun != null && routeRank != null}
                   <tr><td colspan="4" class="ellipsis-row">…</td></tr>
-                  <tr class="current-run">
+                  <tr class="current-run" onclick={() => window.location.href = `/run/${data.activity.id}`} style="cursor:pointer">
                     <td>{routeRank}</td>
-                    <td><a href="/run/{data.activity.id}">{data.activity.date.slice(0, 10)}</a></td>
+                    <td>{data.activity.date.slice(0, 10)}</td>
                     <td>{thisRouteRun.time_s != null ? formatDuration(thisRouteRun.time_s) : '—'}</td>
                     <td>{thisRouteRun.pace_s_km != null ? fmtPace(thisRouteRun.pace_s_km) : '—'}</td>
                   </tr>
@@ -193,8 +193,8 @@
               </thead>
               <tbody>
                 {#each rc.runs as run (run.id)}
-                  <tr class:current-run={run.id === data.activity.id}>
-                    <td><a href="/run/{run.id}">{run.date.slice(0, 10)}</a></td>
+                  <tr class:current-run={run.id === activityId} onclick={() => window.location.href = `/run/${run.id}`} style="cursor:pointer">
+                    <td>{run.date.slice(0, 10)}</td>
                     <td>{run.time_s != null ? formatDuration(run.time_s) : '—'}</td>
                     <td>{run.pace_s_km != null ? fmtPace(run.pace_s_km) : '—'}</td>
                   </tr>
