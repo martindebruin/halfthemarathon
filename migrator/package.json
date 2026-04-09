@@ -12,7 +12,10 @@
     "test": "vitest run",
     "backfill": "tsx src/backfill.ts",
     "patch-polylines": "tsx src/patch-polylines.ts",
-    "patch-calories": "tsx src/patch-calories.ts"
+    "patch-calories": "tsx src/patch-calories.ts",
+    "find-similar-routes": "tsx src/find-similar-routes.ts",
+    "patch-route-names": "tsx src/patch-route-names.ts",
+    "name-routes": "tsx src/name-routes.ts"
   },
   "dependencies": {
     "@mapbox/polyline": "^1.2.1",
