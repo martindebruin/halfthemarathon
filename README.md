@@ -6,9 +6,9 @@ Personal running analytics app aggregating 6+ years of Runkeeper and Strava data
 
 - Run grid with photos, maps, and splits for every activity
 - Year summary pages and lifetime stats
-- Route clustering with personal bests per route
+- Route clustering with personal bests per route and top-5 leaderboard on each run page
+- Automatic route matching on ingest — new app runs are matched to known routes via polyline Hausdorff similarity
 - Calendar heatmap and pace trend charts
-- Strava webhook integration for automatic sync of new runs
 - Android app for GPS recording with background sync, photo attachment, and auto-generated Swedish run titles
 
 ## Architecture
@@ -72,8 +72,11 @@ cd migrator
 npm install
 npm run setup-schema    # idempotent Directus schema setup
 npm run migrate         # full historical migration
-npm run patch-polylines # backfill missing route polylines
-npm run patch-calories  # backfill zero-calorie activities
+npm run patch-polylines      # backfill missing route polylines
+npm run patch-calories       # backfill zero-calorie activities
+npm run find-similar-routes  # find clusters to merge by polyline similarity
+npm run name-routes          # auto-name geo clusters via Nominatim
+npm run patch-route-names    # apply hardcoded route_name patches to activities
 npm run test
 ```
 
