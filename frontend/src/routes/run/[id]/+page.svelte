@@ -26,8 +26,10 @@
 
   let showRouteHistory = $state(false);
 
+  const activityId = $derived(String(data.activity.id));
+
   const thisRouteRun = $derived(
-    data.routeContext?.runs.find((r) => r.id === data.activity.id) ?? null
+    data.routeContext?.runs.find((r) => r.id === activityId) ?? null
   );
 
   const routeRank = $derived.by(() => {
@@ -35,7 +37,7 @@
     const timed = [...data.routeContext.runs.filter((r) => r.time_s != null)].sort(
       (a, b) => a.time_s! - b.time_s!
     );
-    return timed.findIndex((r) => r.id === data.activity.id) + 1;
+    return timed.findIndex((r) => r.id === activityId) + 1;
   });
 
   const top5 = $derived.by((): Array<{ id: string; date: string; time_s: number | null; pace_s_km: number | null }> => {
@@ -46,7 +48,7 @@
       .slice(0, 5);
   });
 
-  const isInTop5 = $derived(top5.some((r) => r.id === data.activity.id));
+  const isInTop5 = $derived(top5.some((r) => r.id === activityId));
 
   function fmtPace(s_km: number): string {
     const m = Math.floor(s_km / 60);

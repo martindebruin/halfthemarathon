@@ -165,6 +165,9 @@ export interface RouteStats {
   cluster_key: string;
   display_name: string;
   run_count: number;
+  avg_distance_m: number;
+  start_lat: number | null;
+  start_lng: number | null;
   best_time_s: number | null;
   best_pace_s_km: number | null;
   sample_polyline: string | null;
@@ -181,7 +184,7 @@ export function computeRoutes(
     run_count: number;
     names: string[];
     distances: number[];
-    times: Array<{ id: string; date: string; moving_time_s: number; distance_m: number; speed: number | null; polyline: string | null }>;
+    times: Array<{ id: string; date: string; moving_time_s: number; distance_m: number; speed: number | null; polyline: string | null; start_lat: number | null; start_lng: number | null }>;
     allRuns: Array<{ id: string; date: string; moving_time_s: number | null; speed: number | null }>;
   };
 
@@ -212,7 +215,7 @@ export function computeRoutes(
 
     if (a.distance_m != null) c.distances.push(a.distance_m);
     if (a.moving_time_s != null && a.distance_m != null) {
-      c.times.push({ id: a.id, date: a.date, moving_time_s: a.moving_time_s, distance_m: a.distance_m, speed, polyline: a.summary_polyline });
+      c.times.push({ id: a.id, date: a.date, moving_time_s: a.moving_time_s, distance_m: a.distance_m, speed, polyline: a.summary_polyline, start_lat: a.start_lat, start_lng: a.start_lng });
     }
   }
 
@@ -237,6 +240,9 @@ export function computeRoutes(
 
     const sortedDist = [...acc.distances].sort((a, b) => a - b);
     const medianDist = sortedDist[Math.floor(sortedDist.length / 2)] ?? 0;
+    const avg_distance_m = acc.distances.length > 0
+      ? Math.round(acc.distances.reduce((s, d) => s + d, 0) / acc.distances.length)
+      : 0;
 
     const sameDistTimes = medianDist > 0
       ? acc.times.filter((t) => Math.abs(t.distance_m - medianDist) / medianDist <= 0.1)
@@ -249,24 +255,26 @@ export function computeRoutes(
     const bestSpeed = speedRuns.length > 0 ? Math.max(...speedRuns.map((t) => t.speed!)) : null;
     const best_pace_s_km = bestSpeed != null ? Math.round(1000 / bestSpeed) : null;
 
-    // sample_polyline: polyline from the fastest run
+    // sample_polyline + start coords: from the fastest run
     const bestSpeedRun = speedRuns.length > 0
       ? speedRuns.reduce((best, t) => (t.speed! > best.speed! ? t : best))
       : null;
     const sample_polyline = bestSpeedRun?.polyline ?? null;
+    const start_lat = bestSpeedRun?.start_lat ?? acc.times[0]?.start_lat ?? null;
+    const start_lng = bestSpeedRun?.start_lng ?? acc.times[0]?.start_lng ?? null;
 
     // runs: all activities in cluster, sorted date descending
     const runs: RouteRun[] = acc.allRuns
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date))
       .map((r) => ({
-        id: r.id,
+        id: String(r.id),
         date: r.date,
         time_s: r.moving_time_s,
         pace_s_km: r.speed != null && r.speed > 0 ? Math.round(1000 / r.speed) : null,
       }));
 
-    results.push({ cluster_key, display_name, run_count: acc.run_count, best_time_s, best_pace_s_km, sample_polyline, runs });
+    results.push({ cluster_key, display_name, run_count: acc.run_count, avg_distance_m, start_lat, start_lng, best_time_s, best_pace_s_km, sample_polyline, runs });
   }
 
   return results.sort((a, b) => b.run_count - a.run_count);

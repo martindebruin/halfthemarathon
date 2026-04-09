@@ -83,6 +83,12 @@
     if (e.key === 'Enter') commitEdit(cluster_key);
     if (e.key === 'Escape') editingKey = null;
   }
+
+  function locationLabel(displayName: string): string {
+    // Strip trailing distance suffix: _8km, _5k, _10KM, _5km_B etc.
+    const stripped = displayName.replace(/_\d+[kK][mM]?(_[A-Za-z])?$/, '');
+    return (stripped || displayName).replace(/_/g, ' ');
+  }
 </script>
 
 <main>
@@ -250,6 +256,8 @@
         <thead>
           <tr>
             <th>Route</th>
+            <th>Location</th>
+            <th>Dist</th>
             <th>Runs</th>
             <th>Best time</th>
             <th>Best pace</th>
@@ -282,6 +290,20 @@
                   {/if}
                 {/if}
               </td>
+              <td class="location-cell">
+                {#if route.start_lat != null && route.start_lng != null}
+                  <a
+                    href="https://www.openstreetmap.org/?mlat={route.start_lat.toFixed(4)}&mlon={route.start_lng.toFixed(4)}&zoom=13"
+                    target="_blank"
+                    rel="noopener"
+                    class="loc-link"
+                    title="{route.start_lat.toFixed(4)}, {route.start_lng.toFixed(4)}"
+                  >{locationLabel(route.display_name)}</a>
+                {:else}
+                  <span class="muted">{locationLabel(route.display_name)}</span>
+                {/if}
+              </td>
+              <td class="num">{route.avg_distance_m > 0 ? formatDistance(route.avg_distance_m) : '—'}</td>
               <td class:muted={route.run_count === 1}>{route.run_count}</td>
               <td>{route.best_time_s != null ? formatDuration(route.best_time_s) : '—'}</td>
               <td>{route.best_pace_s_km != null ? fmtPace(route.best_pace_s_km) : '—'}</td>
@@ -380,4 +402,8 @@
     flex-shrink: 0;
   }
   .map-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .location-cell { font-size: 0.75rem; white-space: nowrap; }
+  .loc-link { color: var(--muted); text-decoration: none; }
+  .loc-link:hover { color: var(--accent); }
+  .num { white-space: nowrap; }
 </style>
