@@ -38,6 +38,16 @@
     return timed.findIndex((r) => r.id === data.activity.id) + 1;
   });
 
+  const top5 = $derived.by((): Array<{ id: string; date: string; time_s: number | null; pace_s_km: number | null }> => {
+    if (!data.routeContext) return [];
+    return [...data.routeContext.runs]
+      .filter((r) => r.time_s != null)
+      .sort((a, b) => a.time_s! - b.time_s!)
+      .slice(0, 5);
+  });
+
+  const isInTop5 = $derived(top5.some((r) => r.id === data.activity.id));
+
   function fmtPace(s_km: number): string {
     const m = Math.floor(s_km / 60);
     const s = Math.round(s_km % 60);
@@ -144,32 +154,33 @@
         {@const rc = data.routeContext}
         <div class="route-context">
           <h2>Route</h2>
-          <div class="route-headline">
-            <a href="/stats" class="route-name-link">{rc.display_name}</a>
-            {#if routeRank != null}
-              <span class="route-rank">#{routeRank} of {rc.runs.filter((r) => r.time_s != null).length} timed runs</span>
-            {/if}
-          </div>
-          <div class="route-compare">
-            {#if thisRouteRun?.time_s != null}
-              <div class="compare-row">
-                <span class="compare-label">Time</span>
-                <span>{formatDuration(thisRouteRun.time_s)}</span>
-                {#if rc.best_time_s != null && rc.best_time_s !== thisRouteRun.time_s}
-                  <span class="muted">best {formatDuration(rc.best_time_s)}</span>
+          <a href="/stats" class="route-name-link">{rc.display_name}</a>
+          {#if top5.length > 0}
+            <table class="route-history">
+              <thead>
+                <tr><th>#</th><th>Date</th><th>Time</th><th>Pace</th></tr>
+              </thead>
+              <tbody>
+                {#each top5 as run, i (run.id)}
+                  <tr class:current-run={run.id === data.activity.id}>
+                    <td>{i + 1}</td>
+                    <td><a href="/run/{run.id}">{run.date.slice(0, 10)}</a></td>
+                    <td>{run.time_s != null ? formatDuration(run.time_s) : '—'}</td>
+                    <td>{run.pace_s_km != null ? fmtPace(run.pace_s_km) : '—'}</td>
+                  </tr>
+                {/each}
+                {#if !isInTop5 && thisRouteRun != null && routeRank != null}
+                  <tr><td colspan="4" class="ellipsis-row">…</td></tr>
+                  <tr class="current-run">
+                    <td>{routeRank}</td>
+                    <td><a href="/run/{data.activity.id}">{data.activity.date.slice(0, 10)}</a></td>
+                    <td>{thisRouteRun.time_s != null ? formatDuration(thisRouteRun.time_s) : '—'}</td>
+                    <td>{thisRouteRun.pace_s_km != null ? fmtPace(thisRouteRun.pace_s_km) : '—'}</td>
+                  </tr>
                 {/if}
-              </div>
-            {/if}
-            {#if thisRouteRun?.pace_s_km != null}
-              <div class="compare-row">
-                <span class="compare-label">Pace</span>
-                <span>{fmtPace(thisRouteRun.pace_s_km)}</span>
-                {#if rc.best_pace_s_km != null && rc.best_pace_s_km !== thisRouteRun.pace_s_km}
-                  <span class="muted">best {fmtPace(rc.best_pace_s_km)}</span>
-                {/if}
-              </div>
-            {/if}
-          </div>
+              </tbody>
+            </table>
+          {/if}
           <button class="toggle-history-btn" onclick={() => showRouteHistory = !showRouteHistory}>
             {showRouteHistory ? 'Hide' : `All ${rc.run_count} runs`} {showRouteHistory ? '▴' : '▾'}
           </button>
@@ -236,15 +247,9 @@
   .notes p { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
 
   .route-context { margin-top: 1.5rem; }
-  .route-context h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.75rem; }
-  .route-headline { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
-  .route-name-link { font-weight: 500; color: var(--text); }
+  .route-context h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.5rem; }
+  .route-name-link { display: block; font-weight: 500; color: var(--text); margin-bottom: 0.75rem; }
   .route-name-link:hover { color: var(--accent); }
-  .route-rank { font-size: 0.8rem; color: var(--muted); }
-  .route-compare { margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
-  .compare-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
-  .compare-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; width: 3rem; flex-shrink: 0; }
-  .muted { color: var(--muted); }
   .toggle-history-btn {
     background: none;
     border: 1px solid var(--border);
@@ -255,10 +260,11 @@
     margin-bottom: 0.75rem;
   }
   .toggle-history-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .route-history { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .route-history { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 0.75rem; }
   .route-history th { text-align: left; padding: 0.4rem 0.5rem; color: var(--muted); font-weight: 400; border-bottom: 1px solid var(--border); }
   .route-history td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
   .route-history tr.current-run td { color: var(--accent); }
   .route-history a { color: inherit; }
   .route-history a:hover { text-decoration: underline; }
+  .ellipsis-row { text-align: center; color: var(--muted); letter-spacing: 0.1em; }
 </style>
