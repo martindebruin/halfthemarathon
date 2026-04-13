@@ -1,6 +1,6 @@
 # CLAUDE.md — halfTheMarathon (HTMITUB)
 
-**Project:** HTMITUB ("Half the Marathon I Used to Be") — personal running analytics app aggregating 6+ years of Runkeeper + Strava data into a SvelteKit web app backed by Directus CMS.
+**Project:** HTMITUB ("Half the Marathon I Used to Be") — personal running analytics app. Runs are recorded via Android app, synced to Directus, and displayed in a SvelteKit web app.
 
 ---
 
@@ -11,7 +11,6 @@
 | `frontend/` | SvelteKit SSR app (public website) | 3000 |
 | `webhook-listener/` | Express server handling Strava webhooks + Android app run uploads | 3001 |
 | `directus/` | Headless CMS (official image, not a directory) | 8055 |
-| `migrator/` | One-shot migration scripts (Runkeeper → Strava → Directus) | — |
 
 All services run in Docker Compose. Directus uses SQLite at `/directus/database/db.sqlite`. The reverse proxy network (`proxy`) is external — expects a pre-existing Traefik/nginx proxy.
 
@@ -36,18 +35,6 @@ npm install
 npm run dev    # tsx watch (hot reload)
 npm run build  # tsc → dist/
 npm run test   # vitest unit tests
-```
-
-### Migrator (run once, or for backfill scripts)
-```bash
-cd migrator
-npm install
-npm run setup-schema    # Create Directus collections (idempotent)
-npm run migrate         # Full migration (reads recovered/, routes/)
-npm run migrate:dry     # Dry run
-npm run patch-polylines # Backfill missing polylines from GPX files
-npm run patch-calories  # Backfill zero-calorie activities (ACSM formula)
-npm run test            # vitest unit tests
 ```
 
 ### Full local stack
@@ -92,13 +79,8 @@ NPM (Nginx Proxy Manager) handles the reverse proxy. The webhook-listener proxy 
 
 ### Webhook listener (`webhook-listener/`)
 - **Express 4 + TypeScript**, compiled to `dist/` via `tsc`
-- **better-sqlite3** — durable SQLite event queue at `data/queue.db`
-- Queue retries: attempt 1 immediate, attempt 2 after 60s, attempt 3 after 300s; Telegram alert on failure
-
-### Migrator (`migrator/`)
-- **TypeScript via `tsx`** — no build step, run directly
-- One-shot scripts; progress saved to `state/progress.json` (gitignored, delete to re-run from scratch)
-- Strava rate limits enforced: 90 req/15 min, 900 req/day
+- Handles Android app run uploads (`POST /api/run`) and photo uploads (`POST /api/run/:id/photo`)
+- Telegram alert on uncaught exceptions
 
 ---
 
@@ -178,17 +160,12 @@ Single `.env` at repo root, loaded by Docker Compose and referenced by all servi
 
 | Variable | Used By | Notes |
 |---|---|---|
-| `STRAVA_CLIENT_ID` | migrator, webhook-listener | |
-| `STRAVA_CLIENT_SECRET` | migrator, webhook-listener | |
-| `STRAVA_ACCESS_TOKEN` | webhook-listener | Refreshed automatically |
-| `STRAVA_UPDATE_TOKEN` | migrator, webhook-listener | OAuth refresh token |
-| `STRAVA_WEBHOOK_VERIFY_TOKEN` | webhook-listener | Webhook handshake secret |
 | `DIRECTUS_SECRET` | Directus | 32+ char session secret |
 | `DIRECTUS_ADMIN_EMAIL` | Directus | |
 | `DIRECTUS_ADMIN_PASSWORD` | Directus | |
 | `DIRECTUS_PUBLIC_URL` | Directus, build | External Directus URL |
 | `DIRECTUS_INTERNAL_URL` | frontend, webhook-listener | Defaults to `http://directus:8055` |
-| `DIRECTUS_TOKEN` | all services | Static API token |
+| `DIRECTUS_TOKEN` | webhook-listener, frontend | Static API token |
 | `FRONTEND_URL` | Directus CORS | Frontend origin |
 | `VITE_DIRECTUS_PUBLIC_URL` | frontend build | Baked into frontend bundle at build time |
 | `TELEGRAM_BOT_TOKEN` | webhook-listener | Error alerts |
@@ -217,24 +194,13 @@ frontend/src/
     health/+page.svelte  # Health check (auto-refreshes)
 
 webhook-listener/src/
-  index.ts               # Server bootstrap + background worker (10s poll)
-  routes/webhook.ts      # Strava webhook handler
+  index.ts               # Server bootstrap
   routes/run.ts          # Android app run upload handler (POST /api/run, POST /api/run/:id/photo)
-  queue.ts               # SQLite queue with retry
-  directus.ts            # upsertStravaActivity, upsertAppRun, syncStravaPhotos
-  strava.ts              # fetchActivity, fetchActivityPhotos
+  directus.ts            # upsertAppRun, uploadPhotoForAppRun, patchActivityName
   route-matcher.ts       # Hausdorff-based route matching on new run ingest
+  headline.ts            # Auto-generated Swedish run titles (Nominatim + local LLM)
   notify.ts              # Telegram alerts
-
-migrator/src/
-  index.ts               # Main migration loop
-  parse.ts               # CSV parsers (cardioActivities.csv, photos.csv)
-  gpx.ts                 # GPX parsing → polyline (max 500 trackpoints)
-  directus.ts            # upsertActivity, upsertPhoto
-  strava.ts              # Strava upload + rate limiter
-  setup-schema.ts        # Idempotent Directus schema setup
-  patch-polylines.ts     # Backfill missing polylines
-  patch-calories.ts      # Backfill zero-calorie activities
+  logger.ts              # JSON structured logging
 ```
 
 ---
