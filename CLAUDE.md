@@ -9,7 +9,7 @@
 | Directory | Purpose | Port |
 |---|---|---|
 | `frontend/` | SvelteKit SSR app (public website) | 3000 |
-| `webhook-listener/` | Express server handling Strava webhook events | 3001 |
+| `webhook-listener/` | Express server handling Strava webhooks + Android app run uploads | 3001 |
 | `directus/` | Headless CMS (official image, not a directory) | 8055 |
 | `migrator/` | One-shot migration scripts (Runkeeper → Strava → Directus) | — |
 
@@ -61,15 +61,22 @@ docker compose up -d
 
 ## Deployment
 
-Manual rsync + Docker Compose rebuild on `dedibox1`. No CI/CD.
+Manual rsync + Docker Compose rebuild on the server. No CI/CD.
 
 Typical deploy (frontend example):
 ```bash
-rsync -avz --delete frontend/src/ dedibox1:/home/martin/dockers/halfthemarathon/frontend/src/
-ssh dedibox1 "cd /home/martin/dockers/halfthemarathon && docker compose up --build -d frontend"
+rsync -avz --delete frontend/src/ <host>:/home/martin/dockers/halfthemarathon/frontend/src/
+ssh <host> "cd /home/martin/dockers/halfthemarathon && docker compose up --build -d frontend"
 ```
 
 The `VITE_DIRECTUS_PUBLIC_URL` is injected at build time as a Docker build ARG — changing it requires a rebuild.
+
+### Android app sync
+The Android app (`android/`) posts runs to `https://webhook-run.martindebruin.se/api/run` (separate subdomain from the main site), routed to the webhook-listener. Config in `android/local.properties` (gitignored).
+
+DNS for all subdomains is managed via a Loopia DynDNS script at `~/scripts/loopiaDNS.py` on the server. Add new subdomains to `~/scripts/data/domains.txt` and re-run the script.
+
+NPM (Nginx Proxy Manager) handles the reverse proxy. The webhook-listener proxy host must use the exact Docker container name as `forward_host` (e.g. `halfthemarathon-webhook-listener-1`).
 
 ---
 
@@ -186,6 +193,8 @@ Single `.env` at repo root, loaded by Docker Compose and referenced by all servi
 | `VITE_DIRECTUS_PUBLIC_URL` | frontend build | Baked into frontend bundle at build time |
 | `TELEGRAM_BOT_TOKEN` | webhook-listener | Error alerts |
 | `TELEGRAM_CHAT_ID` | webhook-listener | Error alerts |
+| `APP_BEARER_TOKEN` | webhook-listener | Android app auth (static bearer token) |
+| `ADMIN_TOKEN` | frontend | Admin cookie for route-renaming UI |
 
 ---
 
@@ -210,9 +219,11 @@ frontend/src/
 webhook-listener/src/
   index.ts               # Server bootstrap + background worker (10s poll)
   routes/webhook.ts      # Strava webhook handler
+  routes/run.ts          # Android app run upload handler (POST /api/run, POST /api/run/:id/photo)
   queue.ts               # SQLite queue with retry
-  directus.ts            # upsertStravaActivity, syncStravaPhotos
+  directus.ts            # upsertStravaActivity, upsertAppRun, syncStravaPhotos
   strava.ts              # fetchActivity, fetchActivityPhotos
+  route-matcher.ts       # Hausdorff-based route matching on new run ingest
   notify.ts              # Telegram alerts
 
 migrator/src/
