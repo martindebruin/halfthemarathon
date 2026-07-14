@@ -75,6 +75,10 @@ ssh <host> "cd /path/to/halfthemarathon && docker compose up --build -d frontend
 
 `VITE_DIRECTUS_PUBLIC_URL` is baked into the frontend bundle at build time via Docker build arg.
 
+### Directus public asset access
+
+Photos are loaded directly from `{DIRECTUS_PUBLIC_URL}/assets/{file_id}` by both the frontend and the Android app, with no auth token attached. This requires the Directus **Public** policy to have `read` permission on the `directus_files` collection — if that permission is ever missing (e.g. after a fresh Directus instance or restored backup), every photo returns 403, old and new alike, even though the underlying files and `photos` records are intact.
+
 ## Admin access
 
 Route names on the stats page are editable when logged in as admin. Visit `/admin/login` and enter the `ADMIN_TOKEN` from your `.env`. Session cookie lasts 30 days.

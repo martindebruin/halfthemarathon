@@ -119,6 +119,6 @@ export async function uploadPhotoForAppRun(
     }),
   });
 
-  const publicUrl = process.env.DIRECTUS_PUBLIC_URL ?? 'https://cms-run.martindebruin.se';
+  const publicUrl = process.env.DIRECTUS_PUBLIC_URL ?? 'https://directus-htm.martindebruin.com';
   return `${publicUrl}/assets/${fileId}?width=240&height=144&fit=cover&quality=70`;
 }
