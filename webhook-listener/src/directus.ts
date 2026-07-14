@@ -97,7 +97,7 @@ export async function uploadPhotoForAppRun(
 
   const filename = `app-run-${appRunId}.jpg`;
   const form = new globalThis.FormData();
-  form.append('file', new Blob([fileBuffer.buffer as ArrayBuffer], { type: mimeType }), filename);
+  form.append('file', new Blob([new Uint8Array(fileBuffer)], { type: mimeType }), filename);
   const fileRes = await fetch(`${getDirectusUrl()}/files`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${getToken()}` },
