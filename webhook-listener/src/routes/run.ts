@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import multer from 'multer';
-import { upsertAppRun, uploadPhotoForAppRun } from '../directus.js';
+import { upsertAppRun, uploadPhotoForAppRun, patchActivityElevation } from '../directus.js';
 import { generateAndSaveHeadline } from '../headline.js';
 import { matchAndAssignRoute } from '../route-matcher.js';
+import { elevationGainForPolyline } from '../elevation.js';
 import { log } from '../logger.js';
 import type { AppRunPayload } from '../directus.js';
 
@@ -70,6 +71,13 @@ runRouter.post('/', async (req: Request, res: Response) => {
     if (p.summary_polyline && p.distance_m) {
       matchAndAssignRoute(activityId, p.summary_polyline, p.distance_m)
         .catch(err => log('warn', 'route_match_failed', { error: String(err) }));
+    }
+
+    // Fire-and-forget: derive elevation gain from a DEM lookup along the route
+    if (p.summary_polyline) {
+      elevationGainForPolyline(p.summary_polyline)
+        .then(gain => (gain === null ? null : patchActivityElevation(activityId, gain)))
+        .catch(err => log('warn', 'elevation_failed', { error: String(err) }));
     }
   } catch (err) {
     log('error', 'app_run_failed', { app_run_id: validation.payload.app_run_id, error: String(err) });

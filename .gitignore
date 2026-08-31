@@ -1,4 +1,5 @@
 .env
+identity.env
 node_modules/
 dist/
 build/
@@ -28,3 +29,6 @@ recovered/
 migrator/state/
 recover.py
 ziDPryqF
+
+# DEM elevation lookup cache
+migrator/.dem-cache.json

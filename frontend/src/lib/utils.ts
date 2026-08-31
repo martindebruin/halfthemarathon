@@ -105,3 +105,28 @@ export function computedSpeed(distance_m: number | null, moving_time_s: number |
   if (!distance_m || !moving_time_s) return null;
   return distance_m / moving_time_s;
 }
+
+export interface Split {
+  split: number;
+  average_speed: number;
+  moving_time: number;
+  average_heartrate?: number;
+  elevation_difference: number;
+  distance: number;
+}
+
+// Directus returns a json column as an already-parsed array, but older rows
+// were written as a JSON string. Accept either shape.
+export function parseSplits(raw: unknown): Split[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as Split[];
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as Split[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}

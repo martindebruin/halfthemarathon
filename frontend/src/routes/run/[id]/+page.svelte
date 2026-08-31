@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types.js';
-  import { formatDistance, formatPace, formatDate, formatDuration, formatHeartRate, computedSpeed } from '$lib/utils.js';
+  import { formatDistance, formatPace, formatDate, formatDuration, formatHeartRate, computedSpeed, parseSplits, type Split } from '$lib/utils.js';
   import RunMap from '$lib/components/RunMap.svelte';
   import ElevationProfile from '$lib/components/ElevationProfile.svelte';
   import Lightbox from '$lib/components/Lightbox.svelte';
@@ -10,17 +10,7 @@
   const activity = $derived(data.activity);
   const photos = $derived(data.photos);
 
-  const splits: Array<{
-    split: number;
-    average_speed: number;
-    moving_time: number;
-    average_heartrate?: number;
-    elevation_difference: number;
-    distance: number;
-  }> = $derived.by(() => {
-    if (!activity.splits_metric) return [];
-    try { return JSON.parse(activity.splits_metric); } catch { return []; }
-  });
+  const splits: Split[] = $derived.by(() => parseSplits(activity.splits_metric));
 
   const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_PUBLIC_URL ?? '';
 

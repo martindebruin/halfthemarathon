@@ -23,7 +23,7 @@ interface Activity {
   best_efforts: string | null;
   start_lat: number | null;
   start_lng: number | null;
-  splits_metric: string | null;
+  splits_metric: unknown;
   calories: number | null;
   suffer_score: number | null;
   pr_count: number | null;

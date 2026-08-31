@@ -82,6 +82,13 @@ export async function patchActivityName(id: string, name: string): Promise<void>
   });
 }
 
+export async function patchActivityElevation(id: string, gain: number): Promise<void> {
+  await directusFetch(`/items/activities/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ total_elevation_gain: gain }),
+  });
+}
+
 export async function uploadPhotoForAppRun(
   appRunId: string,
   fileBuffer: Buffer,
