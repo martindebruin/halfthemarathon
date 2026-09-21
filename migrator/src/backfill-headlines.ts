@@ -5,14 +5,16 @@
  * system — the same code path the webhook-listener runs on new uploads, so
  * backfilled titles and future ones come from one prompt.
  *
- * Reverse-geocode results are cached by rounded coordinates (~100 m), which
- * collapses ~840 Nominatim lookups into a few dozen. Live calls are spaced
- * 1.1 s apart to stay inside Nominatim's usage policy.
+ * Reverse-geocode results are cached by coordinates rounded to ~1 km, which
+ * collapses ~840 Nominatim lookups into a handful — the prompt only wants the
+ * city name, so finer keys just buy extra rate-limited round trips. Live calls
+ * are spaced 1.1 s apart to stay inside Nominatim's usage policy.
  *
  * Usage:
  *   npm run backfill-headlines                  # dry run, whole archive
  *   npm run backfill-headlines -- --limit 5     # dry run, first 5
  *   npm run backfill-headlines -- --apply       # write names to Directus
+ *   npm run backfill-headlines -- --pending-only --apply   # only runs not yet renamed
  */
 
 import dotenv from 'dotenv';
@@ -30,6 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const APPLY = process.argv.includes('--apply');
+const PENDING_ONLY = process.argv.includes('--pending-only');
 const limitIdx = process.argv.indexOf('--limit');
 const LIMIT = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : Infinity;
 
@@ -46,6 +49,22 @@ interface ActivityRow {
   start_lng: number | null;
   distance_m: number | null;
   total_elevation_gain: number | null;
+}
+
+/**
+ * True when `name` is still one of the pre-church-year shapes: blank, the
+ * imported Runkeeper route label, plain "Löpning", or the old weekday
+ * fallback. A generated title matches none of these, so this is the set a
+ * mop-up pass needs to revisit after a partial run.
+ */
+export function isPendingName(name: string | null): boolean {
+  const n = (name ?? '').trim();
+  if (!n) return true;
+  if (n === 'Löpning') return true;
+  if (/^[A-ZÅÄÖ0-9][A-Za-zÅÄÖåäö0-9]*_/.test(n)) return true;
+  if (/^\d+\s?km\b/i.test(n)) return true;
+  if (/löpning\s+(i\s+\S+\s+)?(på|vid)\s/i.test(n)) return true;
+  return false;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -96,7 +115,8 @@ function saveCache(): void {
 let lastNominatimAt = 0;
 
 async function cachedPlace(lat: number, lng: number): Promise<string | null> {
-  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  // 2 decimals ~ 1 km. Finer keys split one town across many lookups.
+  const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
   if (key in geoCache) return geoCache[key];
 
   const wait = NOMINATIM_SPACING_MS - (Date.now() - lastNominatimAt);
@@ -141,8 +161,13 @@ async function main(): Promise<void> {
   if (!APPLY) console.log('=== DRY RUN — pass --apply to write names ===\n');
 
   const all = await fetchActivities();
-  const rows = all.slice(0, LIMIT === Infinity ? undefined : LIMIT);
-  console.log(`${all.length} activities, processing ${rows.length}\n`);
+  const candidates = PENDING_ONLY ? all.filter((r) => isPendingName(r.name)) : all;
+  const rows = candidates.slice(0, LIMIT === Infinity ? undefined : LIMIT);
+  if (PENDING_ONLY) {
+    console.log(`${all.length} activities, ${candidates.length} still unnamed, processing ${rows.length}\n`);
+  } else {
+    console.log(`${all.length} activities, processing ${rows.length}\n`);
+  }
 
   let done = 0;
   let failed = 0;
