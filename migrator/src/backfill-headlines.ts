@@ -15,6 +15,7 @@
  *   npm run backfill-headlines -- --limit 5     # dry run, first 5
  *   npm run backfill-headlines -- --apply       # write names to Directus
  *   npm run backfill-headlines -- --pending-only --apply   # only runs not yet renamed
+ *   npm run backfill-headlines -- --dedupe --apply          # rewrite colliding titles
  */
 
 import dotenv from 'dotenv';
@@ -33,6 +34,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const APPLY = process.argv.includes('--apply');
 const PENDING_ONLY = process.argv.includes('--pending-only');
+const DEDUPE = process.argv.includes('--dedupe');
+const roundsIdx = process.argv.indexOf('--rounds');
+const ROUNDS = roundsIdx !== -1 ? parseInt(process.argv[roundsIdx + 1], 10) : 3;
 const limitIdx = process.argv.indexOf('--limit');
 const LIMIT = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : Infinity;
 
@@ -157,8 +161,99 @@ async function cachedHoliday(date: Date): Promise<Holiday | null> {
 // Main
 // ---------------------------------------------------------------------------
 
+function titleKey(name: string | null): string {
+  return (name ?? '').trim().toLocaleLowerCase('sv-SE');
+}
+
+async function titleFor(row: ActivityRow, avoid: string[], temperature: number): Promise<string> {
+  const date = new Date(row.date);
+  const [place, holiday] = await Promise.all([
+    row.start_lat != null && row.start_lng != null
+      ? cachedPlace(row.start_lat, row.start_lng)
+      : Promise.resolve(null),
+    cachedHoliday(date),
+  ]);
+  return generateHeadline(
+    place,
+    getSwedishDayLabel(date),
+    getTimeOfDayLabel(date),
+    holiday,
+    { distanceM: row.distance_m, elevationGainM: row.total_elevation_gain },
+    avoid.length ? { avoid, temperature } : undefined,
+  );
+}
+
+/**
+ * Only ~86 mass days exist, so runs sharing one converge on the same phrasing.
+ * Keeps the earliest run in each colliding group and rewrites the rest, telling
+ * the model which titles are taken and nudging the temperature up each round.
+ */
+async function dedupe(): Promise<void> {
+  for (let round = 1; round <= ROUNDS; round++) {
+    const all = await fetchActivities();
+    const groups = new Map<string, ActivityRow[]>();
+    for (const r of all) {
+      const key = titleKey(r.name);
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
+    }
+
+    const collisions = [...groups.values()].filter((g) => g.length > 1);
+    const extra = collisions.reduce((n, g) => n + g.length - 1, 0);
+    console.log(`round ${round}: ${all.length} titles, ${groups.size} distinct, ` +
+      `${collisions.length} colliding groups, ${extra} to rewrite`);
+    if (extra === 0) {
+      console.log('nothing left to separate');
+      return;
+    }
+
+    // Every title in use, so a rewrite cannot collide with an untouched run.
+    const taken = new Set([...groups.keys()]);
+    const temperature = Math.min(0.95 + round * 0.1, 1.3);
+    let rewritten = 0;
+
+    for (const group of collisions) {
+      const [, ...rest] = [...group].sort((a, b) => a.date.localeCompare(b.date));
+      for (const row of rest) {
+        const avoid = [...group.map((r) => (r.name ?? '').trim())].filter(Boolean);
+        try {
+          const title = await titleFor(row, [...new Set(avoid)], temperature);
+          const key = titleKey(title);
+          if (taken.has(key)) {
+            console.log(`  ${row.id} still collides ("${title}") — left for next round`);
+            continue;
+          }
+          if (APPLY) await patchName(row.id, title);
+          taken.add(key);
+          rewritten++;
+          console.log(`  ${row.date.slice(0, 10)} ${String(row.id).padEnd(4)} ` +
+            `${JSON.stringify(row.name ?? '')} -> ${JSON.stringify(title)}`);
+        } catch (err) {
+          console.error(`  [!] ${row.id} failed: ${String(err)}`);
+        }
+      }
+    }
+
+    console.log(`round ${round}: rewrote ${rewritten}\n`);
+    if (!APPLY) {
+      console.log('dry run — nothing written, so later rounds would repeat this. Stopping.');
+      return;
+    }
+    if (rewritten === 0) {
+      console.log('no progress this round, stopping');
+      return;
+    }
+  }
+}
+
 async function main(): Promise<void> {
   if (!APPLY) console.log('=== DRY RUN — pass --apply to write names ===\n');
+  if (DEDUPE) {
+    await dedupe();
+    saveCache();
+    return;
+  }
 
   const all = await fetchActivities();
   const candidates = PENDING_ONLY ? all.filter((r) => isPendingName(r.name)) : all;

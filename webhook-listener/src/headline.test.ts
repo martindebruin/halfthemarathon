@@ -216,3 +216,38 @@ describe('isoDateInStockholm', () => {
     expect(isoDateInStockholm(new Date('2026-09-21T16:25:23Z'))).toBe('2026-09-21');
   });
 });
+
+describe('generateHeadline options', () => {
+  const MICKEL = {
+    sv: 'Mickelsmäss', la: 'S. Michaelis', kategori: 'massa',
+    vad: 'Ärkeängeln Mikael.', varfor: 'Höstens räkenskapsdag.', offsetDays: 0,
+  };
+
+  it('passes the avoid list into the prompt and honours temperature', async () => {
+    const spy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: 'Något annat i Knivsta' } }),
+    });
+    vi.stubGlobal('fetch', spy);
+    await generateHeadline('Knivsta', 'Måndag', 'på kvällen', MICKEL, NO_FACTS, {
+      temperature: 1.2,
+      avoid: ['Julen dansades ut i Knivsta'],
+    });
+    const body = JSON.parse(spy.mock.calls[0][1].body);
+    expect(body.options.temperature).toBe(1.2);
+    expect(body.messages[1].content).toContain('Julen dansades ut i Knivsta');
+    expect(body.messages[1].content).toContain('redan använda');
+  });
+
+  it('leaves the prompt untouched when no titles are excluded', async () => {
+    const spy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: 'Räkenskapsdagen i Knivsta' } }),
+    });
+    vi.stubGlobal('fetch', spy);
+    await generateHeadline('Knivsta', 'Måndag', 'på kvällen', MICKEL, NO_FACTS);
+    const body = JSON.parse(spy.mock.calls[0][1].body);
+    expect(body.messages[1].content).not.toContain('redan använda');
+    expect(body.options.temperature).toBe(0.95);
+  });
+});

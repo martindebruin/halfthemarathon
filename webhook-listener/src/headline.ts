@@ -210,15 +210,28 @@ export function cleanTitle(raw: string): string {
     .trim();
 }
 
+export interface HeadlineOptions {
+  /** Raise to push the model off phrasings it keeps reaching for. */
+  temperature?: number;
+  /** Titles already in use, which the model is told to avoid. */
+  avoid?: string[];
+}
+
 export async function generateHeadline(
   place: string | null,
   day: string,
   time: string,
   holiday: Holiday | null,
   facts: RunFacts,
+  opts: HeadlineOptions = {},
 ): Promise<string> {
   if (!holiday) return buildWeekdayFallback(place, day, time);
   const fallback = buildHolidayFallback(holiday, place);
+  let prompt = buildPrompt(holiday, place, time, facts);
+  if (opts.avoid?.length) {
+    prompt += `\n\nDessa titlar är redan använda för andra rundor. Skriv något tydligt annat:\n`
+      + opts.avoid.map((t) => `- ${t}`).join('\n');
+  }
   try {
     const res = await fetch(`${FRMWRK_AI_URL}/api/chat`, {
       method: 'POST',
@@ -228,9 +241,9 @@ export async function generateHeadline(
         stream: false,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildPrompt(holiday, place, time, facts) },
+          { role: 'user', content: prompt },
         ],
-        options: { temperature: 0.95, num_predict: 40 },
+        options: { temperature: opts.temperature ?? 0.95, num_predict: 40 },
       }),
       signal: AbortSignal.timeout(25000),
     });
