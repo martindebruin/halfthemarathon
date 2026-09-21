@@ -93,7 +93,7 @@
         </div>
         <div class="info">
           <time class="date">{formatDate(activity.date)}</time>
-          <div class="route">{activity.route_name ?? activity.name ?? 'Run'}</div>
+          <div class="route">{activity.name?.trim() || activity.route_name || 'Run'}</div>
           <div class="stats">
             <span class="stat">{formatDistance(activity.distance_m)}</span>
             <span class="sep">·</span>

@@ -224,7 +224,7 @@
         <div class="record-card">
           <div class="record-label">Longest run</div>
           <div class="record-value">{formatDistance(records.longestRun.distance_m)}</div>
-          <div class="record-meta">{formatDate(records.longestRun.date)} · {records.longestRun.route_name ?? records.longestRun.name ?? ''}</div>
+          <div class="record-meta">{formatDate(records.longestRun.date)} · {records.longestRun.route_name || records.longestRun.name || ''}</div>
           <a href="/run/{records.longestRun.id}" class="record-link">View run &rarr;</a>
         </div>
       {/if}

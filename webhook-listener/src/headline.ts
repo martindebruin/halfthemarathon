@@ -131,6 +131,7 @@ Regler:
 - Hitta inte på nya sammansatta ord.
 - Skriv aldrig "samma dag" och upprepa inte datumet.
 - En enda fras. Aldrig två meningar.
+- Skriv aldrig i jag-form. Kalendariet talar aldrig om sig själv.
 - Ingen punkt, inga citattecken, ingen förklaring. Svara enbart med titeln.
 
 Exempel:

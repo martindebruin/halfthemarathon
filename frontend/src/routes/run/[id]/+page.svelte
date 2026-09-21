@@ -51,7 +51,7 @@
   <div class="back"><a href="/">&larr; All runs</a></div>
 
   <header>
-    <h1>{activity.name ?? activity.route_name ?? 'Run'}</h1>
+    <h1>{activity.name?.trim() || activity.route_name || 'Run'}</h1>
     <time class="date">{formatDate(activity.date)}</time>
   </header>
 
