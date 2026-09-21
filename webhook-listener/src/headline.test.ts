@@ -4,7 +4,22 @@ import {
   getSwedishDayLabel,
   getPlaceName,
   generateHeadline,
+  buildHolidayFallback,
+  buildPrompt,
+  cleanTitle,
 } from './headline.js';
+import { describeOffset, isoDateInStockholm } from './kyrkoaret.js';
+import type { Holiday } from './kyrkoaret.js';
+
+const MICKELSMASS: Holiday = {
+  sv: 'Mickelsmäss',
+  la: 'S. Michaelis',
+  kategori: 'massa',
+  vad: 'Ärkeängeln Mikael.',
+  varfor: 'Höstens stora räkenskapsdag och tjänstefolkets flyttdag.',
+  offsetDays: 0,
+};
+const NO_FACTS = { distanceM: null, elevationGainM: null };
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -87,26 +102,117 @@ describe('getPlaceName', () => {
 });
 
 describe('generateHeadline', () => {
-  it('returns LLM response on success', async () => {
+  it('returns the model title on success', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        choices: [{ message: { content: 'Påsklöpning i Strängnäs vid lunch' } }],
-      }),
+      json: async () => ({ message: { content: 'Räkenskapsdagen på Stora Essingen' } }),
     }));
-    expect(await generateHeadline('Strängnäs', 'Påskdagen', 'vid lunch'))
-      .toBe('Påsklöpning i Strängnäs vid lunch');
+    expect(await generateHeadline('Stockholm', 'Måndag', 'på kvällen', MICKELSMASS, NO_FACTS))
+      .toBe('Räkenskapsdagen på Stora Essingen');
   });
 
-  it('returns fallback with place when LLM fails', async () => {
+  it('falls back to the holiday title when the model is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Timeout')));
-    expect(await generateHeadline('Strängnäs', 'Måndag', 'på morgonen'))
+    expect(await generateHeadline('Stockholm', 'Måndag', 'på kvällen', MICKELSMASS, NO_FACTS))
+      .toBe('Mickelsmäss i Stockholm');
+  });
+
+  it('falls back to the holiday title when the model returns a rambling answer', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: 'Visst! Här är en titel som fångar '.repeat(4) } }),
+    }));
+    expect(await generateHeadline('Stockholm', 'Måndag', 'på kvällen', MICKELSMASS, NO_FACTS))
+      .toBe('Mickelsmäss i Stockholm');
+  });
+
+  it('falls back to the weekday title when no holiday resolved', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Timeout')));
+    expect(await generateHeadline('Strängnäs', 'Måndag', 'på morgonen', null, NO_FACTS))
       .toBe('Måndagslöpning i Strängnäs på morgonen');
   });
 
-  it('returns fallback without place when place is null', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Timeout')));
-    expect(await generateHeadline(null, 'Söndag', 'på kvällen'))
-      .toBe('Söndagslöpning på kvällen');
+  it('does not call the model at all when no holiday resolved', async () => {
+    const spy = vi.fn();
+    vi.stubGlobal('fetch', spy);
+    await generateHeadline(null, 'Söndag', 'på kvällen', null, NO_FACTS);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildHolidayFallback', () => {
+  it('names the day directly when the run is on it', () => {
+    expect(buildHolidayFallback(MICKELSMASS, 'Stockholm')).toBe('Mickelsmäss i Stockholm');
+  });
+  it('omits the place when unknown', () => {
+    expect(buildHolidayFallback(MICKELSMASS, null)).toBe('Mickelsmäss');
+  });
+  it('counts days forward to an upcoming day', () => {
+    expect(buildHolidayFallback({ ...MICKELSMASS, offsetDays: 3 }, 'Stockholm'))
+      .toBe('3 dagar före Mickelsmäss i Stockholm');
+  });
+  it('counts days back to a passed day', () => {
+    expect(buildHolidayFallback({ ...MICKELSMASS, offsetDays: -4 }, 'Stockholm'))
+      .toBe('4 dagar efter Mickelsmäss i Stockholm');
+  });
+  it('uses singular wording one day out', () => {
+    expect(buildHolidayFallback({ ...MICKELSMASS, offsetDays: 1 }, null))
+      .toBe('Dagen före Mickelsmäss');
+    expect(buildHolidayFallback({ ...MICKELSMASS, offsetDays: -1 }, null))
+      .toBe('Dagen efter Mickelsmäss');
+  });
+});
+
+describe('buildPrompt', () => {
+  it('includes the day, its meaning and the run facts', () => {
+    const prompt = buildPrompt(MICKELSMASS, 'Stockholm', 'på kvällen', {
+      distanceM: 5898.13,
+      elevationGainM: 142,
+    });
+    expect(prompt).toContain('Mickelsmäss (S. Michaelis), samma dag som löpningen.');
+    expect(prompt).toContain('tjänstefolkets flyttdag');
+    expect(prompt).toContain('5,9 km');
+    expect(prompt).toContain('142 m stigning');
+    expect(prompt).toContain('på kvällen');
+  });
+
+  it('omits facts that are missing', () => {
+    const prompt = buildPrompt(MICKELSMASS, null, 'vid lunch', NO_FACTS);
+    expect(prompt).not.toContain('km');
+    expect(prompt).not.toContain('stigning');
+    expect(prompt).toContain('vid lunch');
+  });
+});
+
+describe('cleanTitle', () => {
+  it('strips quotes, arrows and a trailing period', () => {
+    expect(cleanTitle('-> "Tröskningen på Essingen."')).toBe('Tröskningen på Essingen');
+  });
+  it('leaves a clean title untouched', () => {
+    expect(cleanTitle('Slåttern avslutad i Knivsta')).toBe('Slåttern avslutad i Knivsta');
+  });
+});
+
+describe('describeOffset', () => {
+  it('describes the run landing on the day', () => {
+    expect(describeOffset(0)).toBe('samma dag som löpningen');
+  });
+  it('describes an upcoming day', () => {
+    expect(describeOffset(3)).toBe('om 3 dagar');
+    expect(describeOffset(1)).toBe('dagen efter löpningen');
+  });
+  it('describes a passed day', () => {
+    expect(describeOffset(-4)).toBe('4 dagar sedan');
+    expect(describeOffset(-1)).toBe('dagen före löpningen');
+  });
+});
+
+describe('isoDateInStockholm', () => {
+  it('uses the Stockholm calendar day, not the UTC one', () => {
+    // 23:30 UTC on Sep 20 is already Sep 21 in Stockholm (UTC+2)
+    expect(isoDateInStockholm(new Date('2026-09-20T23:30:00Z'))).toBe('2026-09-21');
+  });
+  it('keeps the same day mid-afternoon', () => {
+    expect(isoDateInStockholm(new Date('2026-09-21T16:25:23Z'))).toBe('2026-09-21');
   });
 });

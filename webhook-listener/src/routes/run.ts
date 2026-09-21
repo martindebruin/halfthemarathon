@@ -58,14 +58,7 @@ runRouter.post('/', async (req: Request, res: Response) => {
     log('info', 'app_run_saved', { app_run_id: validation.payload.app_run_id });
     res.status(200).json({ status: 'ok' });
 
-    // Fire-and-forget: generate headline after response is sent
     const p = validation.payload;
-    generateAndSaveHeadline(
-      activityId,
-      p.started_at,
-      p.start_lat ?? null,
-      p.start_lng ?? null,
-    ).catch(err => log('warn', 'headline_failed', { error: String(err) }));
 
     // Fire-and-forget: match to known route if polyline available
     if (p.summary_polyline && p.distance_m) {
@@ -73,12 +66,29 @@ runRouter.post('/', async (req: Request, res: Response) => {
         .catch(err => log('warn', 'route_match_failed', { error: String(err) }));
     }
 
-    // Fire-and-forget: derive elevation gain from a DEM lookup along the route
-    if (p.summary_polyline) {
-      elevationGainForPolyline(p.summary_polyline)
-        .then(gain => (gain === null ? null : patchActivityElevation(activityId, gain)))
-        .catch(err => log('warn', 'elevation_failed', { error: String(err) }));
-    }
+    // Fire-and-forget: derive elevation gain from a DEM lookup along the route.
+    // The headline also wants the gain, so both consume the same lookup.
+    const elevation: Promise<number | null> = p.summary_polyline
+      ? elevationGainForPolyline(p.summary_polyline).catch(err => {
+          log('warn', 'elevation_failed', { error: String(err) });
+          return null;
+        })
+      : Promise.resolve(null);
+
+    elevation
+      .then(gain => (gain === null ? null : patchActivityElevation(activityId, gain)))
+      .catch(err => log('warn', 'elevation_patch_failed', { error: String(err) }));
+
+    // Fire-and-forget: generate headline after response is sent
+    elevation
+      .then(gain => generateAndSaveHeadline(
+        activityId,
+        p.started_at,
+        p.start_lat ?? null,
+        p.start_lng ?? null,
+        { distanceM: p.distance_m ?? null, elevationGainM: gain },
+      ))
+      .catch(err => log('warn', 'headline_failed', { error: String(err) }));
   } catch (err) {
     log('error', 'app_run_failed', { app_run_id: validation.payload.app_run_id, error: String(err) });
     res.status(500).json({ error: 'Internal server error' });

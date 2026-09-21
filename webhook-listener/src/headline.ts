@@ -1,4 +1,5 @@
 import { patchActivityName } from './directus.js';
+import { fetchNearestHoliday, describeOffset, type Holiday } from './kyrkoaret.js';
 
 // Local Stockholm time from a UTC Date
 function toStockholm(date: Date): Date {
@@ -110,47 +111,134 @@ export async function getPlaceName(lat: number, lon: number): Promise<string | n
   }
 }
 
-function buildFallback(place: string | null, day: string, time: string): string {
+const FRMWRK_AI_URL = process.env.FRMWRK_AI_URL ?? 'http://100.98.25.111:11434';
+const FRMWRK_AI_MODEL = process.env.FRMWRK_AI_MODEL ?? 'gemma3:27b-it-q4_K_M';
+
+const SYSTEM_PROMPT = `Du namnger löprundor efter kyrkoåret — de gamla svenska mässdagarna.
+
+Tonen: torr, högtidlig, en smula absurd. Du låter som ett kalendarium som råkat
+börja logga löprundor. Komiken ligger i allvaret, aldrig i skämtet.
+
+Det viktigaste: använd vad dagen HANDLAR OM, inte bara dess namn. Varje mässdag
+styrde en syssla — skörd, tröskning, räkenskaper, boskap hem från skogen, slåtter.
+Låt den sysslan beskriva löprundan. Rundan blir dagens arbete.
+
+Regler:
+- EN naturlig svensk fras, 3-7 ord. Aldrig en rad substantiv efter varandra.
+- Nämn dagen ELLER dess syssla — inte båda.
+- Skedde löpningen inte på själva dagen: säg avståndet i dagar.
+- Väv in EN konkret detalj från rundan. Bara en.
+- Hitta inte på nya sammansatta ord.
+- Skriv aldrig "samma dag" och upprepa inte datumet.
+- En enda fras. Aldrig två meningar.
+- Ingen punkt, inga citattecken, ingen förklaring. Svara enbart med titeln.
+
+Exempel:
+
+Dag: Larsmässa, samma dag som löpningen.
+Dagens syssla: Slåtterns slut, höet skulle vara inne.
+Rundan: Knivsta, 8,0 km
+-> Slåttern avslutad i Knivsta
+
+Dag: Korsmässa om hösten, samma dag som löpningen.
+Dagens syssla: Boskapen togs hem från skogen.
+Rundan: Stora Essingen, 6,7 km, 185 m stigning
+-> Boskapen hem över Essingens backar
+
+Dag: Mickelsmäss, om 3 dagar.
+Dagens syssla: Höstens räkenskapsdag och tjänstefolkets flyttdag.
+Rundan: Tallkrogen, 10,2 km
+-> Tre dagar till flyttdagen, tio kilometer
+
+Dag: Tiburtiusdagen, om 5 dagar.
+Dagens syssla: Dagen björkarna skulle spricka ut.
+Rundan: Halmstad, 4,1 km
+-> Fem dagar innan björken spricker`;
+
+export interface RunFacts {
+  distanceM: number | null;
+  elevationGainM: number | null;
+}
+
+/** Weekday-based title — last resort when no holiday could be resolved. */
+export function buildWeekdayFallback(place: string | null, day: string, time: string): string {
   const parts = [`${day}slöpning`];
   if (place) parts.push(`i ${place}`);
   parts.push(time);
   return parts.join(' ');
 }
 
+/** Deterministic holiday title — used when the LLM is unreachable. */
+export function buildHolidayFallback(holiday: Holiday, place: string | null): string {
+  const where = place ? ` i ${place}` : '';
+  const n = Math.abs(holiday.offsetDays);
+  if (holiday.offsetDays === 0) return `${holiday.sv}${where}`;
+  if (holiday.offsetDays > 0) {
+    return n === 1 ? `Dagen före ${holiday.sv}${where}` : `${n} dagar före ${holiday.sv}${where}`;
+  }
+  return n === 1 ? `Dagen efter ${holiday.sv}${where}` : `${n} dagar efter ${holiday.sv}${where}`;
+}
+
+export function buildPrompt(
+  holiday: Holiday,
+  place: string | null,
+  time: string,
+  facts: RunFacts,
+): string {
+  const lines = [`Dag: ${holiday.sv} (${holiday.la}), ${describeOffset(holiday.offsetDays)}.`];
+  if (holiday.vad) lines.push(`Om dagen: ${holiday.vad}`);
+  if (holiday.varfor) lines.push(`Dagens syssla: ${holiday.varfor}`);
+  const run: string[] = [];
+  if (place) run.push(place);
+  if (facts.distanceM != null) run.push(`${(facts.distanceM / 1000).toFixed(1).replace('.', ',')} km`);
+  if (facts.elevationGainM != null) run.push(`${facts.elevationGainM} m stigning`);
+  lines.push(`Rundan: ${run.join(', ')}`);
+  lines.push(`Tidpunkt: ${time}`);
+  return lines.join('\n');
+}
+
+/** Strip the model's occasional leading dash, quotes or trailing period. */
+export function cleanTitle(raw: string): string {
+  const firstLine = raw.trim().split('\n')[0];
+  return firstLine
+    .replace(/^->\s*/, '')
+    .replace(/^["'«»]+|["'«»]+$/g, '')
+    // A title is one phrase; anything after a sentence break is the model rambling.
+    .split(/\.\s+/)[0]
+    .replace(/\.$/, '')
+    .trim();
+}
+
 export async function generateHeadline(
   place: string | null,
   day: string,
   time: string,
+  holiday: Holiday | null,
+  facts: RunFacts,
 ): Promise<string> {
-  const fallback = buildFallback(place, day, time);
+  if (!holiday) return buildWeekdayFallback(place, day, time);
+  const fallback = buildHolidayFallback(holiday, place);
   try {
-    const lines: string[] = [];
-    if (place) lines.push(`Plats: ${place}.`);
-    lines.push(`Tid: ${time}.`);
-    lines.push(`Dag: ${day}.`);
-    lines.push('Ge mig en löpartitel.');
-
-    const res = await fetch('http://100.98.25.111:8080/v1/chat/completions', {
+    const res = await fetch(`${FRMWRK_AI_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'mistral-small:24b',
+        model: FRMWRK_AI_MODEL,
+        stream: false,
         messages: [
-          {
-            role: 'system',
-            content: 'Du är en assistent som genererar korta, naturliga svenska titlar för löprundor. Svara ENBART med titeln, inget annat. Titeln ska vara 4–7 ord, casual och beskrivande.',
-          },
-          { role: 'user', content: lines.join(' ') },
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: buildPrompt(holiday, place, time, facts) },
         ],
-        max_tokens: 30,
-        temperature: 0.8,
+        options: { temperature: 0.95, num_predict: 40 },
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(25000),
     });
     if (!res.ok) return fallback;
-    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const content = data.choices?.[0]?.message?.content?.trim();
-    return content || fallback;
+    const data = await res.json() as { message?: { content?: string } };
+    const title = cleanTitle(data.message?.content ?? '');
+    // A title longer than a headline means the model started explaining itself.
+    if (!title || title.length > 60) return fallback;
+    return title;
   } catch {
     return fallback;
   }
@@ -161,13 +249,15 @@ export async function generateAndSaveHeadline(
   startedAt: string,
   lat: number | null,
   lng: number | null,
+  facts: RunFacts = { distanceM: null, elevationGainM: null },
 ): Promise<void> {
   const date = new Date(startedAt);
-  const [place, day, time] = await Promise.all([
+  const [place, holiday] = await Promise.all([
     lat != null && lng != null ? getPlaceName(lat, lng) : Promise.resolve(null),
-    Promise.resolve(getSwedishDayLabel(date)),
-    Promise.resolve(getTimeOfDayLabel(date)),
+    fetchNearestHoliday(date),
   ]);
-  const headline = await generateHeadline(place, day, time);
+  const day = getSwedishDayLabel(date);
+  const time = getTimeOfDayLabel(date);
+  const headline = await generateHeadline(place, day, time, holiday, facts);
   await patchActivityName(activityId, headline);
 }
