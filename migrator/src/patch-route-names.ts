@@ -305,6 +305,24 @@ const MERGE_GROUPS: MergeGroup[] = [
     sourceClusters: ['name:Olofsdal_16km'],
   },
 
+  // ── Sixth-pass: Kungsholmsloopen, the regular ~10 km home route ──────────
+  {
+    // 14 runs within 73 m of each other (next-nearest route is 500 m away),
+    // split across four geo clusters only because the distance rounds to
+    // 10 vs 11 km and the GPS start point drifts a block either way.
+    //
+    // geo:59.324_18.005_6km (run 829, 6.14 km) is deliberately left out: it
+    // traces the same streets but is 40% short, so it is a turn-back rather
+    // than the route, and would take over the route's time leaderboard.
+    targetRouteName: 'Kungsholmsloopen',
+    sourceClusters: [
+      'geo:59.324_18.005_11km',
+      'geo:59.324_18.005_10km',
+      'geo:59.325_18.006_10km',
+      'geo:59.325_18.008_10km',
+    ],
+  },
+
   // ── Fifth-pass: Essingeloopen (Sep 2026 app runs) ────────────────────────
   {
     // 840 (5.90 km) and 837 (6.70 km) are the same loop — avg Hausdorff 72 m.
