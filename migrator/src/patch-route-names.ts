@@ -314,7 +314,7 @@ const MERGE_GROUPS: MergeGroup[] = [
     // geo:59.324_18.005_6km (run 829, 6.14 km) is deliberately left out: it
     // traces the same streets but is 40% short, so it is a turn-back rather
     // than the route, and would take over the route's time leaderboard.
-    targetRouteName: 'Kungsholmsloopen',
+    targetRouteName: 'Kungsholmen runt',
     sourceClusters: [
       'geo:59.324_18.005_11km',
       'geo:59.324_18.005_10km',
