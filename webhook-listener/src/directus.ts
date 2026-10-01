@@ -90,6 +90,21 @@ export async function fetchActivityNames(excludeId: string): Promise<string[]> {
   return res.data.filter((r) => String(r.id) !== String(excludeId)).map((r) => r.name);
 }
 
+export async function fetchAppRunsMissingCalories(since: string): Promise<Array<{ id: string | number; date: string }>> {
+  const res = await directusFetch(
+    `/items/activities?fields=id,date&limit=-1&filter[source][_eq]=app&filter[calories][_null]=true` +
+    `&filter[date][_gte]=${encodeURIComponent(since)}`
+  ) as { data: Array<{ id: string | number; date: string }> };
+  return res.data;
+}
+
+export async function patchActivityCalories(id: string, calories: number): Promise<void> {
+  await directusFetch(`/items/activities/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ calories }),
+  });
+}
+
 export async function patchActivityElevation(id: string, gain: number): Promise<void> {
   await directusFetch(`/items/activities/${id}`, {
     method: 'PATCH',

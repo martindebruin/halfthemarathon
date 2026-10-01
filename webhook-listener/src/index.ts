@@ -3,6 +3,7 @@ import express from 'express';
 import { runRouter } from './routes/run.js';
 import { log } from './logger.js';
 import { notify } from './notify.js';
+import { scheduleHealthCalories } from './health-calories.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -29,6 +30,8 @@ async function checkDirectus(): Promise<void> {
   app.listen(PORT, () => {
     log('info', 'server_started', { port: PORT });
   });
+
+  scheduleHealthCalories();
 
   process.on('uncaughtException', (err) => {
     log('error', 'uncaught_exception', { error: String(err) });
