@@ -1,4 +1,4 @@
-import { patchActivityName } from './directus.js';
+import { patchActivityName, fetchActivityNames } from './directus.js';
 import { fetchNearestHoliday, describeOffset, type Holiday } from './kyrkoaret.js';
 
 // Local Stockholm time from a UTC Date
@@ -258,6 +258,40 @@ export async function generateHeadline(
   }
 }
 
+export function titleKey(name: string | null | undefined): string {
+  return (name ?? '').trim().toLocaleLowerCase('sv-SE');
+}
+
+// How many of the newest titles the model is shown; the collision check covers all of them.
+const AVOID_IN_PROMPT = 15;
+
+/**
+ * Runs a few days apart share a mass day and get near-identical prompts, so the
+ * model keeps landing on the same title. `taken` is every title in use, newest
+ * first: the recent ones are named in the prompt, and a repeat is retried hotter.
+ */
+export async function generateDistinctHeadline(
+  place: string | null,
+  day: string,
+  time: string,
+  holiday: Holiday | null,
+  facts: RunFacts,
+  taken: string[],
+): Promise<string> {
+  const used = new Set(taken.map(titleKey));
+  const avoid = taken.slice(0, AVOID_IN_PROMPT);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const title = await generateHeadline(place, day, time, holiday, facts, {
+      avoid,
+      temperature: 0.95 + attempt * 0.15,
+    });
+    if (!used.has(titleKey(title))) return title;
+    avoid.push(title);
+  }
+  if (!holiday) return buildWeekdayFallback(place, day, time);
+  return `${buildHolidayFallback(holiday, place)} ${time}`;
+}
+
 export async function generateAndSaveHeadline(
   activityId: string,
   startedAt: string,
@@ -266,12 +300,13 @@ export async function generateAndSaveHeadline(
   facts: RunFacts = { distanceM: null, elevationGainM: null },
 ): Promise<void> {
   const date = new Date(startedAt);
-  const [place, holiday] = await Promise.all([
+  const [place, holiday, taken] = await Promise.all([
     lat != null && lng != null ? getPlaceName(lat, lng) : Promise.resolve(null),
     fetchNearestHoliday(date),
+    fetchActivityNames(activityId).catch(() => [] as string[]),
   ]);
   const day = getSwedishDayLabel(date);
   const time = getTimeOfDayLabel(date);
-  const headline = await generateHeadline(place, day, time, holiday, facts);
+  const headline = await generateDistinctHeadline(place, day, time, holiday, facts, taken);
   await patchActivityName(activityId, headline);
 }

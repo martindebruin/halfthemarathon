@@ -7,6 +7,7 @@ import {
   buildHolidayFallback,
   buildPrompt,
   cleanTitle,
+  generateDistinctHeadline,
 } from './headline.js';
 import { describeOffset, isoDateInStockholm } from './kyrkoaret.js';
 import type { Holiday } from './kyrkoaret.js';
@@ -249,5 +250,51 @@ describe('generateHeadline options', () => {
     const body = JSON.parse(spy.mock.calls[0][1].body);
     expect(body.messages[1].content).not.toContain('redan använda');
     expect(body.options.temperature).toBe(0.95);
+  });
+});
+
+describe('generateDistinctHeadline', () => {
+  function modelReplies(...titles: string[]) {
+    const spy = vi.fn();
+    for (const t of titles) {
+      spy.mockResolvedValueOnce({ ok: true, json: async () => ({ message: { content: t } }) });
+    }
+    vi.stubGlobal('fetch', spy);
+    return spy;
+  }
+
+  it('keeps the first title when nobody has it', async () => {
+    modelReplies('Räkenskapsdagen i Stockholm');
+    const title = await generateDistinctHeadline(
+      'Stockholm', 'Tisdag', 'på kvällen', MICKELSMASS, NO_FACTS, ['Något helt annat'],
+    );
+    expect(title).toBe('Räkenskapsdagen i Stockholm');
+  });
+
+  it('tells the model which recent titles are taken', async () => {
+    const spy = modelReplies('Räkenskapsdagen i Stockholm');
+    await generateDistinctHeadline(
+      'Stockholm', 'Tisdag', 'på kvällen', MICKELSMASS, NO_FACTS, ['Årets bokslut i Stockholms backar'],
+    );
+    const body = JSON.parse(spy.mock.calls[0][1].body);
+    expect(body.messages[1].content).toContain('Årets bokslut i Stockholms backar');
+  });
+
+  it('retries hotter when the model repeats a title already in use', async () => {
+    const spy = modelReplies('Årets bokslut i Stockholms backar', 'Flyttdagen över Kungsholmen');
+    const title = await generateDistinctHeadline(
+      'Stockholm', 'Tisdag', 'på kvällen', MICKELSMASS, NO_FACTS, ['årets bokslut i stockholms backar '],
+    );
+    expect(title).toBe('Flyttdagen över Kungsholmen');
+    const second = JSON.parse(spy.mock.calls[1][1].body);
+    expect(second.options.temperature).toBeGreaterThan(0.95);
+  });
+
+  it('falls back to a time-tagged title when every attempt collides', async () => {
+    modelReplies('Samma', 'Samma', 'Samma');
+    const title = await generateDistinctHeadline(
+      'Stockholm', 'Tisdag', 'på kvällen', MICKELSMASS, NO_FACTS, ['Samma'],
+    );
+    expect(title).toBe('Mickelsmäss i Stockholm på kvällen');
   });
 });

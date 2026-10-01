@@ -82,6 +82,14 @@ export async function patchActivityName(id: string, name: string): Promise<void>
   });
 }
 
+/** Every run title in use except this run's own, newest first. */
+export async function fetchActivityNames(excludeId: string): Promise<string[]> {
+  const res = await directusFetch(
+    `/items/activities?fields=id,name&sort=-date&limit=-1&filter[name][_nempty]=true`
+  ) as { data: Array<{ id: string | number; name: string }> };
+  return res.data.filter((r) => String(r.id) !== String(excludeId)).map((r) => r.name);
+}
+
 export async function patchActivityElevation(id: string, gain: number): Promise<void> {
   await directusFetch(`/items/activities/${id}`, {
     method: 'PATCH',
