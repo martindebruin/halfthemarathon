@@ -1,4 +1,4 @@
-import { createDirectus, rest, staticToken, readItems, readItem, createItem, updateItem } from '@directus/sdk';
+import { createDirectus, rest, staticToken, readItems, readItem, createItem, updateItem, deleteItem, deleteItems, deleteFiles } from '@directus/sdk';
 
 interface Activity {
   id: string;
@@ -57,7 +57,7 @@ export async function getAllActivities(): Promise<Activity[]> {
       sort: ['-date'],
       limit: -1,
       fields: [
-        'id', 'strava_id', 'date', 'name', 'route_name', 'distance_m', 'moving_time_s',
+        'id', 'strava_id', 'source', 'date', 'name', 'route_name', 'distance_m', 'moving_time_s', 'calories',
         'average_speed', 'average_heartrate', 'summary_polyline', 'total_elevation_gain',
         'type', 'sport_type', 'best_efforts', 'start_lat', 'start_lng',
         'photos.directus_file_id',
@@ -154,6 +154,23 @@ export async function upsertRouteAlias(cluster_key: string, display_name: string
   } else {
     await c.request(createItem('route_aliases', { cluster_key, display_name }));
   }
+}
+
+export async function updateActivity(id: string, patch: Partial<Activity>): Promise<Activity> {
+  const c = client();
+  return c.request(updateItem('activities', id, patch)) as Promise<Activity>;
+}
+
+/** Removes the run together with its photo rows and the stored image files. */
+export async function deleteActivity(id: string): Promise<void> {
+  const c = client();
+  const photos = await getActivityPhotos(id);
+  if (photos.length) {
+    await c.request(deleteItems('photos', photos.map((p) => p.id)));
+    const files = photos.flatMap((p) => (p.directus_file_id ? [p.directus_file_id] : []));
+    if (files.length) await c.request(deleteFiles(files));
+  }
+  await c.request(deleteItem('activities', id));
 }
 
 export type { Activity, Photo };
