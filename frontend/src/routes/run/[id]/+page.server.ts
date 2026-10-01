@@ -1,9 +1,11 @@
 import { getActivity, getActivityPhotos, getAllActivities, getRouteAliases } from '$lib/server/directus.js';
 import { computeRoutes } from '$lib/stats.js';
 import { error } from '@sveltejs/kit';
+import { requireLogin } from '$lib/server/auth.js';
 import type { PageServerLoad } from './$types.js';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, cookies, url }) => {
+  requireLogin(cookies, url);
   try {
     const [activity, photos, allActivities, aliases] = await Promise.all([
       getActivity(params.id),

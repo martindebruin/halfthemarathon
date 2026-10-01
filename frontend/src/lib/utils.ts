@@ -130,3 +130,8 @@ export function parseSplits(raw: unknown): Split[] {
   }
   return [];
 }
+
+/** Photos go through the login-checked /photo proxy, never straight to Directus. */
+export function photoUrl(fileId: string, transform = ''): string {
+  return `/photo/${fileId}${transform ? `?${transform}` : ''}`;
+}

@@ -1,9 +1,11 @@
 import { getAllActivities } from '$lib/server/directus.js';
 import { computedSpeed } from '$lib/utils.js';
 import { error } from '@sveltejs/kit';
+import { requireLogin } from '$lib/server/auth.js';
 import type { PageServerLoad } from './$types.js';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, cookies, url }) => {
+  requireLogin(cookies, url);
   const year = parseInt(params.year, 10);
   if (isNaN(year) || year < 2000 || year > 2100) error(404, 'Not found');
 

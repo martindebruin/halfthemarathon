@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { photoUrl } from '$lib/utils.js';
+
   let {
     photos,
-    directusUrl,
   }: {
     photos: Array<{ id: string; directus_file_id: string | null; caption: string | null }>;
-    directusUrl: string;
   } = $props();
 
   const visible = $derived(photos.filter((p) => p.directus_file_id));
@@ -31,7 +31,7 @@
     {#each visible as photo, i (photo.id)}
       <button class="thumb-btn" onclick={() => open(i)} aria-label={photo.caption ?? `Photo ${i + 1}`}>
         <img
-          src="{directusUrl}/assets/{photo.directus_file_id}?width=200&height=150&fit=cover&quality=70"
+          src={photoUrl(photo.directus_file_id!, 'width=200&height=150&fit=cover&quality=70')}
           alt={photo.caption ?? ''}
           loading="lazy"
           class="thumb"
@@ -58,7 +58,7 @@
       {/if}
 
       <img
-        src="{directusUrl}/assets/{photo.directus_file_id}?width=1200&quality=90"
+        src={photoUrl(photo.directus_file_id!, 'width=1200&quality=90')}
         alt={photo.caption ?? ''}
         class="full-img"
       />

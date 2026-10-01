@@ -1,3 +1,4 @@
+import { requireLogin } from '$lib/server/auth.js';
 import type { PageServerLoad } from './$types.js';
 import { readItems } from '@directus/sdk';
 import { createDirectus, rest, staticToken } from '@directus/sdk';
@@ -15,7 +16,8 @@ async function ping(url: string): Promise<boolean> {
   }
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ cookies, url }) => {
+  requireLogin(cookies, url);
   const c = createDirectus(DIRECTUS_URL).with(staticToken(DIRECTUS_TOKEN)).with(rest());
 
   const [directusOk, webhookOk, activityCount, photoCount, latestActivity] = await Promise.all([

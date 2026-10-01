@@ -2,8 +2,9 @@
   import 'leaflet/dist/leaflet.css';
   import favicon from '$lib/assets/favicon.svg';
   import type { Snippet } from 'svelte';
+  import type { LayoutData } from './$types.js';
 
-  let { children }: { children: Snippet } = $props();
+  let { children, data }: { children: Snippet; data: LayoutData } = $props();
 </script>
 
 <svelte:head>
@@ -14,10 +15,13 @@
 
 <nav>
   <a href="/" class="logo"><img src="/bannerlogo.png" alt="Half the Marathon I Used to Be" /></a>
-  <div class="links">
-    <a href="/">Runs</a>
-    <a href="/stats">Stats</a>
-  </div>
+  {#if data.loggedIn}
+    <div class="links">
+      <a href="/">Runs</a>
+      <a href="/stats">Stats</a>
+      <form method="POST" action="/logout"><button type="submit">Logga ut</button></form>
+    </div>
+  {/if}
 </nav>
 
 {@render children()}
@@ -63,5 +67,12 @@
     color: var(--muted);
     margin-top: 0.6rem;
   }
-  .links a:hover { color: var(--text); }
+  .links a:hover, .links button:hover { color: var(--text); }
+  .links button {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
 </style>

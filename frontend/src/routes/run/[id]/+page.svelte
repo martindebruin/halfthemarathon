@@ -12,8 +12,6 @@
 
   const splits: Split[] = $derived.by(() => parseSplits(activity.splits_metric));
 
-  const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_PUBLIC_URL ?? '';
-
   let showRouteHistory = $state(false);
 
   const activityId = $derived(String(data.activity.id));
@@ -67,7 +65,7 @@
 
       <ElevationProfile {splits} />
 
-      <Lightbox {photos} directusUrl={DIRECTUS_URL} />
+      <Lightbox {photos} />
     </div>
 
     <div class="stats-col">

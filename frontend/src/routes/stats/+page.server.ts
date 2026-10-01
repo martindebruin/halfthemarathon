@@ -1,6 +1,6 @@
 import { getAllActivities, getRecords, getRouteAliases } from '$lib/server/directus.js';
-import { isAdmin } from '$lib/server/admin.js';
 import { calculateStreaks, calculatePersonalBests, computeRoutes, MILESTONES } from '$lib/stats.js';
+import { requireLogin } from '$lib/server/auth.js';
 import type { PageServerLoad } from './$types.js';
 
 interface WeekStat {
@@ -23,7 +23,8 @@ function getISOWeek(date: Date): { year: number; week: number } {
   return { year: d.getUTCFullYear(), week };
 }
 
-export const load: PageServerLoad = async ({ cookies }) => {
+export const load: PageServerLoad = async ({ cookies, url }) => {
+  requireLogin(cookies, url);
   const [activities, records, aliases] = await Promise.all([
     getAllActivities(),
     getRecords(),
@@ -144,6 +145,6 @@ export const load: PageServerLoad = async ({ cookies }) => {
     yoy,
     paceTrends,
     routes,
-    isAdmin: isAdmin(cookies),
+    isAdmin: true,
   };
 };

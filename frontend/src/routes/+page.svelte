@@ -1,10 +1,8 @@
 <script lang="ts">
   import type { PageData } from './$types.js';
-  import { formatDistance, formatPace, formatDate, formatDuration, polylineToSvgPath, computedSpeed } from '$lib/utils.js';
+  import { formatDistance, formatPace, formatDate, formatDuration, polylineToSvgPath, computedSpeed, photoUrl } from '$lib/utils.js';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-
-  const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_PUBLIC_URL ?? '';
 
   let { data }: { data: PageData } = $props();
 
@@ -71,7 +69,7 @@
         <div class="map">
           {#if activity.photos?.[0]?.directus_file_id}
             <img
-              src="{DIRECTUS_URL}/assets/{activity.photos[0].directus_file_id}?width=240&height=144&fit=cover&quality=70"
+              src={photoUrl(activity.photos[0].directus_file_id, 'width=240&height=144&fit=cover&quality=70')}
               alt=""
               loading="lazy"
               class="thumb"
