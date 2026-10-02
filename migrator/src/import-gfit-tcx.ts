@@ -25,32 +25,56 @@ interface Trackpoint {
   ele: number | null;
 }
 
-function parseTcx(content: string): { activityId: string; calories: number | null; points: Trackpoint[] } {
+// Google Fit starts a new <Lap> at every pause, and each lap's trackpoint
+// <DistanceMeters> restarts at 0. Taking the last trackpoint as the run's
+// distance therefore kept only the final lap, so distances are carried forward
+// across laps and calories and lap times are summed.
+function parseTcx(content: string): {
+  activityId: string;
+  calories: number | null;
+  movingTimeS: number | null;
+  points: Trackpoint[];
+} {
   const idMatch = content.match(/<Id>([^<]+)<\/Id>/);
   const activityId = idMatch ? idMatch[1] : '';
 
-  const calMatch = content.match(/<Calories>([^<]+)<\/Calories>/);
-  const calories = calMatch ? parseFloat(calMatch[1]) : null;
+  const laps = [...content.matchAll(/<Lap\b[\s\S]*?<\/Lap>/g)].map((m) => m[0]);
+  if (laps.length === 0) laps.push(content);
 
+  let calories: number | null = null;
+  let movingTimeS: number | null = null;
   const points: Trackpoint[] = [];
-  const tpMatches = [...content.matchAll(/<Trackpoint>([\s\S]*?)<\/Trackpoint>/g)];
-  for (const m of tpMatches) {
-    const block = m[1];
-    const distM = block.match(/<DistanceMeters>([^<]+)<\/DistanceMeters>/);
-    const timeM = block.match(/<Time>([^<]+)<\/Time>/);
-    const latM = block.match(/<LatitudeDegrees>([^<]+)<\/LatitudeDegrees>/);
-    const lngM = block.match(/<LongitudeDegrees>([^<]+)<\/LongitudeDegrees>/);
-    const eleM = block.match(/<AltitudeMeters>([^<]+)<\/AltitudeMeters>/);
-    if (!distM || !timeM) continue;
-    points.push({
-      distanceM: parseFloat(distM[1]),
-      time: new Date(timeM[1]).getTime(),
-      lat: latM ? parseFloat(latM[1]) : null,
-      lng: lngM ? parseFloat(lngM[1]) : null,
-      ele: eleM ? parseFloat(eleM[1]) : null,
-    });
+  let offset = 0;
+  for (const lap of laps) {
+    // Lap-level fields sit outside <Track> (Google Fit writes them after it).
+    const header = lap.replace(/<Track>[\s\S]*?<\/Track>/g, '');
+    const calMatch = header.match(/<Calories>([^<]+)<\/Calories>/);
+    if (calMatch) calories = (calories ?? 0) + parseFloat(calMatch[1]);
+    const timeMatch = header.match(/<TotalTimeSeconds>([^<]+)<\/TotalTimeSeconds>/);
+    if (timeMatch) movingTimeS = (movingTimeS ?? 0) + parseFloat(timeMatch[1]);
+
+    let lapEnd = 0;
+    for (const m of lap.matchAll(/<Trackpoint>([\s\S]*?)<\/Trackpoint>/g)) {
+      const block = m[1];
+      const distM = block.match(/<DistanceMeters>([^<]+)<\/DistanceMeters>/);
+      const timeM = block.match(/<Time>([^<]+)<\/Time>/);
+      const latM = block.match(/<LatitudeDegrees>([^<]+)<\/LatitudeDegrees>/);
+      const lngM = block.match(/<LongitudeDegrees>([^<]+)<\/LongitudeDegrees>/);
+      const eleM = block.match(/<AltitudeMeters>([^<]+)<\/AltitudeMeters>/);
+      if (!distM || !timeM) continue;
+      const d = parseFloat(distM[1]);
+      lapEnd = Math.max(lapEnd, d);
+      points.push({
+        distanceM: offset + d,
+        time: new Date(timeM[1]).getTime(),
+        lat: latM ? parseFloat(latM[1]) : null,
+        lng: lngM ? parseFloat(lngM[1]) : null,
+        ele: eleM ? parseFloat(eleM[1]) : null,
+      });
+    }
+    offset += lapEnd;
   }
-  return { activityId, calories, points };
+  return { activityId, calories, movingTimeS, points };
 }
 
 // A missing altitude must not be treated as sea level - that turns the first
@@ -112,7 +136,13 @@ async function directusFetch(reqPath: string, options: RequestInit = {}): Promis
   return res.json();
 }
 
+// --repair rewrites the derived fields of runs already imported (distance,
+// time, pace, calories, splits) and leaves names, routes, elevation and photos.
+const REPAIR = process.argv.includes('--repair');
+const APPLY = process.argv.includes('--apply');
+
 async function main() {
+  if (REPAIR && !APPLY) console.log('=== DRY RUN — pass --apply to write ===');
   const files = await glob('*.tcx', { cwd: TCX_DIR, absolute: true });
   console.log(`Found ${files.length} TCX files in ${TCX_DIR}`);
 
@@ -121,7 +151,7 @@ async function main() {
     const filename = path.basename(file);
     try {
       const content = fs.readFileSync(file, 'utf-8');
-      const { activityId, calories, points } = parseTcx(content);
+      const { activityId, calories, movingTimeS, points } = parseTcx(content);
       if (!activityId || points.length === 0) {
         console.log(`  SKIP ${filename}: no id/points`);
         skip++;
@@ -130,20 +160,52 @@ async function main() {
 
       const gfitId = `gfit_${activityId}`;
       const existing = await directusFetch(
-        `/items/activities?filter[runkeeper_id][_eq]=${encodeURIComponent(gfitId)}&fields=id`
+        `/items/activities?filter[runkeeper_id][_eq]=${encodeURIComponent(gfitId)}` +
+        `&fields=id,distance_m,moving_time_s,calories`
       );
-      if (existing.data.length > 0) {
-        console.log(`  SKIP ${filename}: already imported`);
-        skip++;
-        continue;
-      }
 
       const withGps = points.filter((p) => p.lat !== null && p.lng !== null);
       const first = points[0];
       const last = points[points.length - 1];
       const durationSeconds = Math.round((last.time - first.time) / 1000);
+      const movingSeconds = movingTimeS != null ? Math.round(movingTimeS) : durationSeconds;
       const distanceM = last.distanceM;
       const splits = computeSplits(points);
+
+      if (existing.data.length > 0) {
+        const row = existing.data[0];
+        const changed = Math.abs((row.distance_m ?? 0) - distanceM) > 1 ||
+          row.moving_time_s !== movingSeconds ||
+          Math.abs((row.calories ?? 0) - (calories ?? 0)) > 0.5;
+        if (!REPAIR || !changed) {
+          console.log(`  SKIP ${filename}: already imported${REPAIR ? ', unchanged' : ''}`);
+          skip++;
+          continue;
+        }
+        console.log(`  REPAIR ${row.id} ${filename}: ` +
+          `${Math.round(row.distance_m)}m/${row.moving_time_s}s/${Math.round(row.calories ?? 0)}kcal -> ` +
+          `${Math.round(distanceM)}m/${movingSeconds}s/${Math.round(calories ?? 0)}kcal`);
+        if (APPLY) {
+          await directusFetch(`/items/activities/${row.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              distance_m: distanceM,
+              moving_time_s: movingSeconds,
+              elapsed_time_s: durationSeconds,
+              average_speed: movingSeconds > 0 ? distanceM / movingSeconds : null,
+              calories,
+              splits_metric: splits.length ? JSON.stringify(splits) : null,
+            }),
+          });
+        }
+        ok++;
+        continue;
+      }
+      if (REPAIR) {
+        console.log(`  SKIP ${filename}: not imported yet (repair only touches existing runs)`);
+        skip++;
+        continue;
+      }
 
       const record: Record<string, unknown> = {
         runkeeper_id: gfitId,
@@ -153,9 +215,9 @@ async function main() {
         route_name: null,
         type: 'Run',
         distance_m: distanceM,
-        moving_time_s: durationSeconds,
+        moving_time_s: movingSeconds,
         elapsed_time_s: durationSeconds,
-        average_speed: durationSeconds > 0 ? distanceM / durationSeconds : null,
+        average_speed: movingSeconds > 0 ? distanceM / movingSeconds : null,
         calories,
         splits_metric: splits.length ? JSON.stringify(splits) : null,
       };
