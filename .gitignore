@@ -26,6 +26,7 @@ resume
 recovered/
 /routes/
 *.zip
+gfit-2026-runs/
 migrator/state/
 recover.py
 ziDPryqF
