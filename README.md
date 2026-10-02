@@ -56,6 +56,14 @@ npm run check   # type check
 npm run test    # unit tests
 ```
 
+### Migrator scripts
+
+`DIRECTUS_TOKEN` is not kept in `.env`. Run scripts through the wrapper, which fetches it from Infisical (needs the `infisical` CLI logged in and `INFISICAL_PROJECT_ID` in `.env`):
+
+```bash
+scripts/with-secrets.sh npm --prefix migrator run backfill-headlines
+```
+
 ### Webhook listener
 
 ```bash

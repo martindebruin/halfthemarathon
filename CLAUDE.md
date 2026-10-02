@@ -149,6 +149,9 @@ async function directusFetch(path: string, options: RequestInit = {}): Promise<u
 }
 ```
 
+### Running migrator scripts locally
+`DIRECTUS_TOKEN` is not in `.env` or `migrator/.env`; it lives in Infisical (`htm_directus_token`). Wrap commands: `scripts/with-secrets.sh npm --prefix migrator run <script>`.
+
 ### Adding a new migrator script
 Follow `migrator/src/patch-polylines.ts` as the pattern. Add a `"script-name": "tsx src/script.ts"` entry to `migrator/package.json`.
 
