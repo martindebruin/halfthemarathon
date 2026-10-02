@@ -1,5 +1,5 @@
 import fs from 'fs';
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
 import { fetchAppRunsMissingCalories, patchActivityCalories } from './directus.js';
 import { log } from './logger.js';
 
@@ -43,13 +43,19 @@ export async function fillCaloriesFromHealth(): Promise<void> {
   const runs = await fetchAppRunsMissingCalories(since);
   if (runs.length === 0) return;
 
-  const db = new Database(dbPath, { readonly: true, fileMustExist: true, timeout: 30_000 });
-  let workouts: HealthWorkout[];
+  // sql.js (WASM) rather than a native addon: better-sqlite3 segfaulted on
+  // node:20-alpine. The whole file is read into memory, which is fine at ~15 MB.
+  const SQL = await initSqlJs();
+  const db = new SQL.Database(fs.readFileSync(dbPath));
+  const workouts: HealthWorkout[] = [];
   try {
-    workouts = db.prepare(
+    const stmt = db.prepare(
       `SELECT start_time, calories_kcal FROM workout
        WHERE exercise_name = 'running' AND start_time >= ?`
-    ).all(since.slice(0, 10)) as HealthWorkout[];
+    );
+    stmt.bind([since.slice(0, 10)]);
+    while (stmt.step()) workouts.push(stmt.getAsObject() as unknown as HealthWorkout);
+    stmt.free();
   } finally {
     db.close();
   }
