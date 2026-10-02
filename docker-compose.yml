@@ -39,8 +39,10 @@ services:
     environment:
       DIRECTUS_INTERNAL_URL: "http://directus:8055"
       PORT: "3001"
+      HEALTH_DB_PATH: /data/health/health.db
     volumes:
       - webhook_data:/app/data
+      - health_data:/data/health:ro
     depends_on:
       directus:
         condition: service_healthy
@@ -84,3 +86,6 @@ volumes:
   directus_db:
   directus_uploads:
   webhook_data:
+  health_data:
+    external: true
+    name: health-sync_health_data

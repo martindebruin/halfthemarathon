@@ -171,7 +171,9 @@ Single `.env` at repo root, loaded by Docker Compose and referenced by all servi
 | `TELEGRAM_BOT_TOKEN` | webhook-listener | Error alerts |
 | `TELEGRAM_CHAT_ID` | webhook-listener | Error alerts |
 | `APP_BEARER_TOKEN` | webhook-listener | Android app auth (static bearer token) |
-| `ADMIN_TOKEN` | frontend | Admin cookie for route-renaming UI |
+| `SITE_PASSWORD` | frontend | Site login password (session cookie also gates route renaming) |
+| `API_TOKEN` | frontend | Bearer token for `/api/v1` |
+| `HEALTH_DB_PATH` | webhook-listener | Read-only health-sync SQLite; fills app-run calories hourly |
 
 ---
 
